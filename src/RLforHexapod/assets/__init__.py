@@ -9,3 +9,6 @@ from pathlib import Path
 
 RLFORHEXAPOD_ASSETS_DIR = Path(__file__).resolve().parent / "data"
 """Path to project-owned asset data."""
+
+def validate_assets() -> list[str]:
+    """Return missing local assets dependencies without requirments"""
