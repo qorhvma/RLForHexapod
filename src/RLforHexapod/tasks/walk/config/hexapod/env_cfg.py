@@ -17,7 +17,6 @@ from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import TerminationTermCfg as DoneTerm
-from isaaclab_tasks.manger_based.locomotion.velocity import mdp as loco_mdp
 from isaaclab.utils.configclass import configclass
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg, NewtonCollisionPipelineCfg, NewtonManager
 from isaaclab.sensors import ContactSensorCfg
@@ -102,7 +101,7 @@ class RewardsCfg:
     joint_torques_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-7)
     feet_air_time = RewTerm(
-        func=loco_mdp.feet_air_time,
+        func=mdp.feet_air_time,
         weight=0.5,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names="tibia.*"),
