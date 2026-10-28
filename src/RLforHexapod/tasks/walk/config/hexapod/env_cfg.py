@@ -40,8 +40,11 @@ HEXAPOD_CFG = ArticulationCfg(
     actuators={
         "legs": ImplicitActuatorCfg(
             joint_names_expr=[".*"],   # 18개 관절 전부
-            stiffness=None,
-            damping=None,
+            # USD 기본값(kp=100)은 링크 관성(~1e-4 kg·m²)에 비해 너무 커서 발산함
+            stiffness=10.0,
+            damping=0.3,
+            # 감속기 반사 관성(MG996R 급 ~0.005-0.01). 0이면 가벼운 tibia가 불안정
+            armature=0.005,
         ),
     },
 )
@@ -102,7 +105,7 @@ class HexapodEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         self.decimation = 4
-        self.sim.dt = 1.0 / 120.0
+        self.sim.dt = 1.0 / 200.0  # 정책 50Hz (decimation 4)
         self.episode_length_s = 20.0
         self.sim.physics = NewtonCfg(solver_cfg=MJWarpSolverCfg())
     
