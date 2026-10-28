@@ -134,11 +134,13 @@ class CommandCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        heading_command=False,
+        heading_command=True,
+        heading_control_stiffness=0.5,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(0.0, 0.3),
             lin_vel_y=(0.0, 0.0),
-            ang_vel_z=(0.0, 0.0),
+            ang_vel_z=(-0.5, 0.5),
+            heading=(-math.pi, math.pi),
         ),
         debug_vis=True,
     )

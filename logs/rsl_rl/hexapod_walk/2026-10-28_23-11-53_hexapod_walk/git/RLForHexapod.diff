@@ -1,0 +1,41 @@
+--- git commit ---
+f0c2837772e5d06f912e2865b46954c6b335c8fc
+
+
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	logs/rsl_rl/hexapod_walk/2026-10-28_23-11-53_hexapod_walk/
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py b/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
+index 11d85d0..790c67d 100644
+--- a/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
++++ b/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
+@@ -134,11 +134,13 @@ class CommandCfg:
+     base_velocity = mdp.UniformVelocityCommandCfg(
+         asset_name="robot",
+         resampling_time_range=(10.0, 10.0),
+-        heading_command=False,
++        heading_command=True,
++        heading_control_stiffness=0.5,
+         ranges=mdp.UniformVelocityCommandCfg.Ranges(
+             lin_vel_x=(0.0, 0.3),
+             lin_vel_y=(0.0, 0.0),
+-            ang_vel_z=(0.0, 0.0),
++            ang_vel_z=(-0.5, 0.5),
++            heading=(-math.pi, math.pi),
+         ),
+         debug_vis=True,
+     )
