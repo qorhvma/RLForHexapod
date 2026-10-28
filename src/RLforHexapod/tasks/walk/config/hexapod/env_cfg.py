@@ -48,10 +48,8 @@ HEXAPOD_CFG = ArticulationCfg(
     actuators={
         "legs": ImplicitActuatorCfg(
             joint_names_expr=[".*"],   # 18개 관절 전부
-            # USD 기본값(kp=100)은 링크 관성(~1e-4 kg·m²)에 비해 너무 커서 발산함
-            # 서기 하중(다리당 ~0.3-0.6Nm)에서 처짐 2° 이내가 되도록 kp=20
-            stiffness=20.0,
-            damping=0.5,
+            stiffness=None,
+            damping=None,
             # 감속기 반사 관성(MG996R 급 ~0.005-0.01). 0이면 가벼운 tibia가 불안정
             armature=0.005,
         ),
