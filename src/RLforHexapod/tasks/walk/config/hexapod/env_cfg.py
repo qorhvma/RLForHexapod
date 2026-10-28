@@ -47,8 +47,9 @@ HEXAPOD_CFG = ArticulationCfg(
         "legs": ImplicitActuatorCfg(
             joint_names_expr=[".*"],   # 18개 관절 전부
             stiffness=None,
-            damping=0.2,
-            armature=0.02,
+            damping=None,
+            # 감속기 반사 관성(MG996R 급 ~0.005-0.01). 0이면 가벼운 tibia가 불안정
+            armature=0.005,
         ),
     },
 )
