@@ -1,3 +1,5 @@
+import math
+
 from isaaclab.assets import AssetBaseCfg, RigidObjectCfg
 
 from isaaclab.envs import (
@@ -32,16 +34,20 @@ HEXAPOD_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 1.0),
+        pos=(0.0, 0.0, 0.2),
         rot=(0.0, 0.0, 0.0, 1.0),
-        joint_pos={".*": 0.0},
+        joint_pos={
+            ".*_coxa": 0.0,
+            ".*_femur": math.radians(90.0),  # 0=아래로 수직, 90=수평 (한계 0~180)
+            ".*_tibia": math.radians(-170.0),  # -180=femur 수평일 때 수직 (한계 -180~0)
+        },
         joint_vel={".*": 0.0},
     ),
     actuators={
         "legs": ImplicitActuatorCfg(
             joint_names_expr=[".*"],   # 18개 관절 전부
-            stiffness=0.0,
-            damping=0.0,
+            stiffness=None,
+            damping=None,
         ),
     },
 )
@@ -102,7 +108,7 @@ class HexapodEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         self.decimation = 4
-        self.sim.dt = 1.0 / 120.0
+        self.sim.dt = 1.0 / 200.0  # 정책 50Hz (decimation 4)
         self.episode_length_s = 20.0
         self.sim.physics = NewtonCfg(solver_cfg=MJWarpSolverCfg())
     
