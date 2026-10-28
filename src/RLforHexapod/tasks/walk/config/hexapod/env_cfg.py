@@ -36,11 +36,11 @@ HEXAPOD_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 1.0),
+        pos=(0.0, 0.0, 0.2),
         rot=(0.0, 0.0, 0.0, 1.0),
         joint_pos={
             ".*_coxa": 0.0,
-            ".*_femur": math.radians(0.0),  # 0=아래로 수직, 90=수평 (한계 0~270)
+            ".*_femur": math.radians(145.0),  # 0=아래로 수직, 90=수평 (한계 0~270)
             ".*_tibia": math.radians(-210.0),  # -180=femur 수평일 때 수직 (한계 -270~0)
         },
         joint_vel={".*": 0.0},
