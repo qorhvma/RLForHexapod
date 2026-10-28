@@ -95,7 +95,7 @@ class RewardsCfg:
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    joint_torques_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-7)
 
 
