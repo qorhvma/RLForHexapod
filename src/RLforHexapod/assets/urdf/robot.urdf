@@ -13,7 +13,7 @@
     <visual>
       <origin xyz="0.00126334 0.02625 -0.019" rpy="1.5708 -0 -3.14159"/>
       <geometry>
-        <mesh filename="package://assets/hw674.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/hw674.stl"/>
       </geometry>
       <material name="hw674_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -22,14 +22,14 @@
     <collision>
       <origin xyz="0.00126334 0.02625 -0.019" rpy="1.5708 -0 -3.14159"/>
       <geometry>
-        <mesh filename="package://assets/hw674.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/hw674.stl"/>
       </geometry>
     </collision>
     <!-- Part mg996r -->
     <visual>
       <origin xyz="-0.082401 0.0485387 -0.036" rpy="0 -0 -0.628319"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
       <material name="mg996r_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -38,14 +38,14 @@
     <collision>
       <origin xyz="-0.082401 0.0485387 -0.036" rpy="0 -0 -0.628319"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
     </collision>
     <!-- Part batterycover -->
     <visual>
       <origin xyz="0.00319266 0.00685048 -0.0187" rpy="-3.14159 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/batterycover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/batterycover.stl"/>
       </geometry>
       <material name="batterycover_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -54,14 +54,14 @@
     <collision>
       <origin xyz="0.00319266 0.00685048 -0.0187" rpy="-3.14159 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/batterycover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/batterycover.stl"/>
       </geometry>
     </collision>
     <!-- Part mg996r_2 -->
     <visual>
       <origin xyz="-0.0824279 -0.0485583 -0.036" rpy="-0 0 0.628319"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
       <material name="mg996r_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -70,14 +70,14 @@
     <collision>
       <origin xyz="-0.0824279 -0.0485583 -0.036" rpy="-0 0 0.628319"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
     </collision>
     <!-- Part mg996r_3 -->
     <visual>
       <origin xyz="0.0823608 -0.0485939 -0.036" rpy="-0 0 2.51327"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
       <material name="mg996r_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -86,14 +86,14 @@
     <collision>
       <origin xyz="0.0823608 -0.0485939 -0.036" rpy="-0 0 2.51327"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
     </collision>
     <!-- Part mg996r_4 -->
     <visual>
       <origin xyz="0.0824279 0.0485583 -0.036" rpy="0 0 -2.51327"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
       <material name="mg996r_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -102,14 +102,14 @@
     <collision>
       <origin xyz="0.0824279 0.0485583 -0.036" rpy="0 0 -2.51327"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
     </collision>
     <!-- Part mg996r_5 -->
     <visual>
       <origin xyz="-0 0.0885 -0.036" rpy="0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
       <material name="mg996r_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -118,14 +118,14 @@
     <collision>
       <origin xyz="-0 0.0885 -0.036" rpy="0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
     </collision>
     <!-- Part mainbody -->
     <visual>
       <origin xyz="0.00960775 0.0659215 -0.0087" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/mainbody.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mainbody.stl"/>
       </geometry>
       <material name="mainbody_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -134,14 +134,14 @@
     <collision>
       <origin xyz="0.00960775 0.0659215 -0.0087" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/mainbody.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mainbody.stl"/>
       </geometry>
     </collision>
     <!-- Part mg996r_6 -->
     <visual>
       <origin xyz="0 -0.0885 -0.036" rpy="-0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
       <material name="mg996r_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -150,14 +150,14 @@
     <collision>
       <origin xyz="0 -0.0885 -0.036" rpy="-0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/mg996r.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/mg996r.stl"/>
       </geometry>
     </collision>
     <!-- Part bodytop -->
     <visual>
       <origin xyz="0 0 0.01" rpy="-0 0 -3.14159"/>
       <geometry>
-        <mesh filename="package://assets/bodytop.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/bodytop.stl"/>
       </geometry>
       <material name="bodytop_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -166,14 +166,14 @@
     <collision>
       <origin xyz="0 0 0.01" rpy="-0 0 -3.14159"/>
       <geometry>
-        <mesh filename="package://assets/bodytop.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/bodytop.stl"/>
       </geometry>
     </collision>
     <!-- Part battery -->
     <visual>
       <origin xyz="0 0 -0.004" rpy="3.14159 -0 -0"/>
       <geometry>
-        <mesh filename="package://assets/battery.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/battery.stl"/>
       </geometry>
       <material name="battery_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -182,14 +182,14 @@
     <collision>
       <origin xyz="0 0 -0.004" rpy="3.14159 -0 -0"/>
       <geometry>
-        <mesh filename="package://assets/battery.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/battery.stl"/>
       </geometry>
     </collision>
     <!-- Part hw674_2 -->
     <visual>
       <origin xyz="-0.00198992 -0.02625 -0.019" rpy="1.5708 0 0"/>
       <geometry>
-        <mesh filename="package://assets/hw674.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/hw674.stl"/>
       </geometry>
       <material name="hw674_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -198,7 +198,7 @@
     <collision>
       <origin xyz="-0.00198992 -0.02625 -0.019" rpy="1.5708 0 0"/>
       <geometry>
-        <mesh filename="package://assets/hw674.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/hw674.stl"/>
       </geometry>
     </collision>
   </link>
@@ -213,7 +213,7 @@
     <visual>
       <origin xyz="-0.0428219 -0.0199594 0.021885" rpy="-1.59151 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -222,14 +222,14 @@
     <collision>
       <origin xyz="-0.0428219 -0.0199594 0.021885" rpy="-1.59151 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part coxajoint -->
     <visual>
       <origin xyz="-0.0213802 -0.00610042 -0.00169" rpy="1.5708 -0 3.12088"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
       <material name="coxajoint_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -238,14 +238,14 @@
     <collision>
       <origin xyz="-0.0213802 -0.00610042 -0.00169" rpy="1.5708 -0 3.12088"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn -->
     <visual>
       <origin xyz="-0.0129469 0.000251289 -0.00424" rpy="-0 0 -0.0207108"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -254,7 +254,7 @@
     <collision>
       <origin xyz="-0.0129469 0.000251289 -0.00424" rpy="-0 0 -0.0207108"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
   </link>
@@ -269,7 +269,7 @@
     <visual>
       <origin xyz="2.5e-05 -0.01295 -0.045225" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -278,14 +278,14 @@
     <collision>
       <origin xyz="2.5e-05 -0.01295 -0.045225" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover -->
     <visual>
       <origin xyz="0.0065 -0.10652 0.009865" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -294,14 +294,14 @@
     <collision>
       <origin xyz="0.0065 -0.10652 0.009865" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_3 -->
     <visual>
       <origin xyz="2.5e-05 -0.08707 -0.045225" rpy="-0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -310,14 +310,14 @@
     <collision>
       <origin xyz="2.5e-05 -0.08707 -0.045225" rpy="-0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_2 -->
     <visual>
       <origin xyz="0.0065 -0.0065 0.009865" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -326,14 +326,14 @@
     <collision>
       <origin xyz="0.0065 -0.0065 0.009865" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part femur -->
     <visual>
       <origin xyz="-0.0065 -0.07877 -0.042675" rpy="1.5708 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
       <material name="femur_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -342,7 +342,7 @@
     <collision>
       <origin xyz="-0.0065 -0.07877 -0.042675" rpy="1.5708 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
     </collision>
   </link>
@@ -357,7 +357,7 @@
     <visual>
       <origin xyz="-0.00384549 -0.14722 -0.0208" rpy="-3.14159 0 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
       <material name="tibiatip3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -366,14 +366,14 @@
     <collision>
       <origin xyz="-0.00384549 -0.14722 -0.0208" rpy="-3.14159 0 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
     </collision>
     <!-- Part rc9mg_2 -->
     <visual>
       <origin xyz="0 -0.0105 0" rpy="-3.14159 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -382,14 +382,14 @@
     <collision>
       <origin xyz="0 -0.0105 0" rpy="-3.14159 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip1 -->
     <visual>
       <origin xyz="-0.005 -0.1405 -0.0208" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
       <material name="tibiatip1_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -398,14 +398,14 @@
     <collision>
       <origin xyz="-0.005 -0.1405 -0.0208" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
     </collision>
     <!-- Part tibia -->
     <visual>
       <origin xyz="-0.02115 0.013075 -0.0143" rpy="-3.14159 0 -0"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
       <material name="tibia_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -414,14 +414,14 @@
     <collision>
       <origin xyz="-0.02115 0.013075 -0.0143" rpy="-3.14159 0 -0"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip2 -->
     <visual>
       <origin xyz="-0.005 -0.14315 -0.0208" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
       <material name="tibiatip2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -430,7 +430,7 @@
     <collision>
       <origin xyz="-0.005 -0.14315 -0.0208" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
     </collision>
   </link>
@@ -484,7 +484,7 @@
     <visual>
       <origin xyz="-0.0423993 -0.0208419 0.021885" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -493,14 +493,14 @@
     <collision>
       <origin xyz="-0.0423993 -0.0208419 0.021885" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part coxajoint_2 -->
     <visual>
       <origin xyz="-0.0212493 -0.00654189 -0.00169" rpy="1.5708 0 -3.14159"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
       <material name="coxajoint_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -509,14 +509,14 @@
     <collision>
       <origin xyz="-0.0212493 -0.00654189 -0.00169" rpy="1.5708 0 -3.14159"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_4 -->
     <visual>
       <origin xyz="-0.0129493 -1.6886e-05 -0.00424" rpy="-0 -0 0"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -525,7 +525,7 @@
     <collision>
       <origin xyz="-0.0129493 -1.6886e-05 -0.00424" rpy="-0 -0 0"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
   </link>
@@ -540,7 +540,7 @@
     <visual>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -549,14 +549,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_3 -->
     <visual>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="-0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -565,14 +565,14 @@
     <collision>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="-0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_6 -->
     <visual>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="-0 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -581,14 +581,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="-0 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_4 -->
     <visual>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -597,14 +597,14 @@
     <collision>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part femur_2 -->
     <visual>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
       <material name="femur_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -613,7 +613,7 @@
     <collision>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
     </collision>
   </link>
@@ -628,7 +628,7 @@
     <visual>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="3.14159 -0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
       <material name="tibiatip3_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -637,14 +637,14 @@
     <collision>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="3.14159 -0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
     </collision>
     <!-- Part rc9mg_4 -->
     <visual>
       <origin xyz="0 0.0105 0" rpy="3.14159 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -653,14 +653,14 @@
     <collision>
       <origin xyz="0 0.0105 0" rpy="3.14159 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip1_2 -->
     <visual>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
       <material name="tibiatip1_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -669,14 +669,14 @@
     <collision>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
     </collision>
     <!-- Part tibia_2 -->
     <visual>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
       <material name="tibia_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -685,14 +685,14 @@
     <collision>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip2_2 -->
     <visual>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
       <material name="tibiatip2_2_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -701,7 +701,7 @@
     <collision>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
     </collision>
   </link>
@@ -755,7 +755,7 @@
     <visual>
       <origin xyz="-0.0420291 -0.0215787 0.021885" rpy="-1.55334 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -764,14 +764,14 @@
     <collision>
       <origin xyz="-0.0420291 -0.0215787 0.021885" rpy="-1.55334 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part coxajoint_3 -->
     <visual>
       <origin xyz="-0.0211319 -0.00691174 -0.00169" rpy="1.5708 0 -3.12414"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
       <material name="coxajoint_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -780,14 +780,14 @@
     <collision>
       <origin xyz="-0.0211319 -0.00691174 -0.00169" rpy="1.5708 0 -3.12414"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_7 -->
     <visual>
       <origin xyz="-0.0129471 -0.00024288 -0.00424" rpy="-0 -0 0.0174533"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_7_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -796,7 +796,7 @@
     <collision>
       <origin xyz="-0.0129471 -0.00024288 -0.00424" rpy="-0 -0 0.0174533"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
   </link>
@@ -811,7 +811,7 @@
     <visual>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_8_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -820,14 +820,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_5 -->
     <visual>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -836,14 +836,14 @@
     <collision>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_9 -->
     <visual>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="-0 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_9_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -852,14 +852,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="-0 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_6 -->
     <visual>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -868,14 +868,14 @@
     <collision>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part femur_3 -->
     <visual>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
       <material name="femur_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -884,7 +884,7 @@
     <collision>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
     </collision>
   </link>
@@ -899,7 +899,7 @@
     <visual>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="-3.14159 -0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
       <material name="tibiatip3_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -908,14 +908,14 @@
     <collision>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="-3.14159 -0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
     </collision>
     <!-- Part rc9mg_6 -->
     <visual>
       <origin xyz="-0 0.0105 0" rpy="3.14159 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -924,14 +924,14 @@
     <collision>
       <origin xyz="-0 0.0105 0" rpy="3.14159 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip1_3 -->
     <visual>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
       <material name="tibiatip1_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -940,14 +940,14 @@
     <collision>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
     </collision>
     <!-- Part tibia_3 -->
     <visual>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="-3.14159 0 -3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
       <material name="tibia_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -956,14 +956,14 @@
     <collision>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="-3.14159 0 -3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip2_3 -->
     <visual>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
       <material name="tibiatip2_3_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -972,7 +972,7 @@
     <collision>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
     </collision>
   </link>
@@ -1026,7 +1026,7 @@
     <visual>
       <origin xyz="-0.0428429 -0.0199142 0.021885" rpy="-1.59256 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_7_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1035,14 +1035,14 @@
     <collision>
       <origin xyz="-0.0428429 -0.0199142 0.021885" rpy="-1.59256 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part coxajoint_4 -->
     <visual>
       <origin xyz="-0.0213867 -0.0060779 -0.00169" rpy="1.5708 0 3.11983"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
       <material name="coxajoint_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1051,14 +1051,14 @@
     <collision>
       <origin xyz="-0.0213867 -0.0060779 -0.00169" rpy="1.5708 0 3.11983"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_10 -->
     <visual>
       <origin xyz="-0.0129466 0.000264925 -0.00424" rpy="-0 -0 -0.021764"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_10_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1067,7 +1067,7 @@
     <collision>
       <origin xyz="-0.0129466 0.000264925 -0.00424" rpy="-0 -0 -0.021764"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
   </link>
@@ -1082,7 +1082,7 @@
     <visual>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="-0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_11_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1091,14 +1091,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="-0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_7 -->
     <visual>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_7_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1107,14 +1107,14 @@
     <collision>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_12 -->
     <visual>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_12_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1123,14 +1123,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_8 -->
     <visual>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="-0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_8_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1139,14 +1139,14 @@
     <collision>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="-0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part femur_4 -->
     <visual>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
       <material name="femur_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1155,7 +1155,7 @@
     <collision>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
     </collision>
   </link>
@@ -1170,7 +1170,7 @@
     <visual>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
       <material name="tibiatip3_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1179,14 +1179,14 @@
     <collision>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
     </collision>
     <!-- Part rc9mg_8 -->
     <visual>
       <origin xyz="0 0.0105 -0" rpy="3.14159 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_8_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1195,14 +1195,14 @@
     <collision>
       <origin xyz="0 0.0105 -0" rpy="3.14159 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip1_4 -->
     <visual>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
       <material name="tibiatip1_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1211,14 +1211,14 @@
     <collision>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
     </collision>
     <!-- Part tibia_4 -->
     <visual>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
       <material name="tibia_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1227,14 +1227,14 @@
     <collision>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip2_4 -->
     <visual>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
       <material name="tibiatip2_4_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1243,7 +1243,7 @@
     <collision>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
     </collision>
   </link>
@@ -1297,7 +1297,7 @@
     <visual>
       <origin xyz="-0.0423993 -0.0208419 0.021885" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_9_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1306,14 +1306,14 @@
     <collision>
       <origin xyz="-0.0423993 -0.0208419 0.021885" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part coxajoint_5 -->
     <visual>
       <origin xyz="-0.0212493 -0.00654189 -0.00169" rpy="1.5708 -0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
       <material name="coxajoint_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1322,14 +1322,14 @@
     <collision>
       <origin xyz="-0.0212493 -0.00654189 -0.00169" rpy="1.5708 -0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_13 -->
     <visual>
       <origin xyz="-0.0129493 -1.6886e-05 -0.00424" rpy="0 0 -0"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_13_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1338,7 +1338,7 @@
     <collision>
       <origin xyz="-0.0129493 -1.6886e-05 -0.00424" rpy="0 0 -0"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
   </link>
@@ -1353,7 +1353,7 @@
     <visual>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_14_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1362,14 +1362,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_9 -->
     <visual>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_9_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1378,14 +1378,14 @@
     <collision>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_15 -->
     <visual>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="-0 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_15_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1394,14 +1394,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="-0 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_10 -->
     <visual>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_10_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1410,14 +1410,14 @@
     <collision>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part femur_5 -->
     <visual>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
       <material name="femur_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1426,7 +1426,7 @@
     <collision>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
     </collision>
   </link>
@@ -1441,7 +1441,7 @@
     <visual>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
       <material name="tibiatip3_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1450,14 +1450,14 @@
     <collision>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
     </collision>
     <!-- Part rc9mg_10 -->
     <visual>
       <origin xyz="-0 0.0105 -0" rpy="3.14159 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_10_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1466,14 +1466,14 @@
     <collision>
       <origin xyz="-0 0.0105 -0" rpy="3.14159 0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip1_5 -->
     <visual>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
       <material name="tibiatip1_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1482,14 +1482,14 @@
     <collision>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
     </collision>
     <!-- Part tibia_5 -->
     <visual>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
       <material name="tibia_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1498,14 +1498,14 @@
     <collision>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip2_5 -->
     <visual>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
       <material name="tibiatip2_5_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1514,7 +1514,7 @@
     <collision>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
     </collision>
   </link>
@@ -1568,7 +1568,7 @@
     <visual>
       <origin xyz="-0.0423993 -0.0208419 0.021885" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_11_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1577,14 +1577,14 @@
     <collision>
       <origin xyz="-0.0423993 -0.0208419 0.021885" rpy="-1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part coxajoint_6 -->
     <visual>
       <origin xyz="-0.0212493 -0.00654189 -0.00169" rpy="1.5708 -0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
       <material name="coxajoint_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1593,14 +1593,14 @@
     <collision>
       <origin xyz="-0.0212493 -0.00654189 -0.00169" rpy="1.5708 -0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/coxajoint.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/coxajoint.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_16 -->
     <visual>
       <origin xyz="-0.0129493 -1.6886e-05 -0.00424" rpy="0 -0 -0"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_16_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1609,7 +1609,7 @@
     <collision>
       <origin xyz="-0.0129493 -1.6886e-05 -0.00424" rpy="0 -0 -0"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
   </link>
@@ -1624,7 +1624,7 @@
     <visual>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_17_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1633,14 +1633,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.08707 -0.045225" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_11 -->
     <visual>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="-0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_11_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1649,14 +1649,14 @@
     <collision>
       <origin xyz="-0.0065 0.0065 0.009865" rpy="-0 -0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part motorhorn_18 -->
     <visual>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="-0 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
       <material name="motorhorn_18_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1665,14 +1665,14 @@
     <collision>
       <origin xyz="-2.5e-05 -0.01295 -0.045225" rpy="-0 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/motorhorn.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/motorhorn.stl"/>
       </geometry>
     </collision>
     <!-- Part jointcover_12 -->
     <visual>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
       <material name="jointcover_12_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1681,14 +1681,14 @@
     <collision>
       <origin xyz="-0.0065 -0.09352 0.009865" rpy="0 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/jointcover.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/jointcover.stl"/>
       </geometry>
     </collision>
     <!-- Part femur_6 -->
     <visual>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
       <material name="femur_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1697,7 +1697,7 @@
     <collision>
       <origin xyz="0.0065 -0.02125 -0.042675" rpy="1.5708 0 -1.5708"/>
       <geometry>
-        <mesh filename="package://assets/femur.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/femur.stl"/>
       </geometry>
     </collision>
   </link>
@@ -1712,7 +1712,7 @@
     <visual>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
       <material name="tibiatip3_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1721,14 +1721,14 @@
     <collision>
       <origin xyz="0.00384549 0.14722 -0.0208" rpy="-3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip3.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip3.stl"/>
       </geometry>
     </collision>
     <!-- Part rc9mg_12 -->
     <visual>
       <origin xyz="-0 0.0105 -0" rpy="3.14159 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
       <material name="rc9mg_12_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1737,14 +1737,14 @@
     <collision>
       <origin xyz="-0 0.0105 -0" rpy="3.14159 -0 1.5708"/>
       <geometry>
-        <mesh filename="package://assets/rc9mg.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/rc9mg.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip1_6 -->
     <visual>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
       <material name="tibiatip1_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1753,14 +1753,14 @@
     <collision>
       <origin xyz="0.005 0.1405 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip1.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip1.stl"/>
       </geometry>
     </collision>
     <!-- Part tibia_6 -->
     <visual>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
       <material name="tibia_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1769,14 +1769,14 @@
     <collision>
       <origin xyz="0.02115 -0.013075 -0.0143" rpy="3.14159 0 3.14159"/>
       <geometry>
-        <mesh filename="package://assets/tibia.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibia.stl"/>
       </geometry>
     </collision>
     <!-- Part tibiatip2_6 -->
     <visual>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
       <material name="tibiatip2_6_material">
         <color rgba="0.615686 0.811765 0.929412 1"/>
@@ -1785,7 +1785,7 @@
     <collision>
       <origin xyz="0.005 0.14315 -0.0208" rpy="1.5708 -1.5708 0"/>
       <geometry>
-        <mesh filename="package://assets/tibiatip2.stl"/>
+        <mesh filename="C:\Users\COM\isaac-lab-workspace\RLForHexapod\src\RLforHexapod\assets\assets/tibiatip2.stl"/>
       </geometry>
     </collision>
   </link>

@@ -10,4 +10,4 @@ from pathlib import Path
 RLFORHEXAPOD_ASSETS_DIR = Path(__file__).resolve().parent
 """Path to project-owned asset data."""
 
-ROBOT_USDA = RLFORHEXAPOD_ASSETS_DIR / "robot.usda"
+ROBOT_USDA = RLFORHEXAPOD_ASSETS_DIR / "robot" / "robot" / "robot.usda"

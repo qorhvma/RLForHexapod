@@ -27,6 +27,7 @@ dependencies = [
 RLforHexapod = "RLforHexapod.tasks"
 
 [project.optional-dependencies]
+isaacsim = ["isaacsim[all,extscache]==6.2.0.0", "PyJWT[crypto]>=2.15.1,<3"]
 leapp = ["leapp==0.7.2"]
 ovphysx = ["ovphysx"]
 ovrtx = ["ovrtx==0.5.0.377615", "ovstage==0.1.1.355824"]
@@ -71,7 +72,7 @@ torchvision = { index = "pytorch-cu130" }
 [[tool.uv.index]]
 name = "nvidia"
 url = "https://pypi.nvidia.com"
-explicit = true
+explicit = false
 
 [[tool.uv.index]]
 name = "pytorch-cu130"
