@@ -13,9 +13,9 @@ class HexapodStatePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 64
     max_iterations = 800
     save_interval = 50
-    experiment_name = "hexapod_vial_state"
+    experiment_name = "hexapod_walk"
     run_name = ""
-    obs_groups = {"actor": ["policy"], "critic": ["critic"]}
+    obs_groups = {"actor": ["policy"], "critic": ["policy"]}
     clip_actions = 1.0
     actor = RslRlMLPModelCfg(
         hidden_dims=[256, 256, 128],

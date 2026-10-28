@@ -34,7 +34,7 @@ HEXAPOD_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 1.0),
+        pos=(0.0, 0.0, 0.17),
         rot=(0.0, 0.0, 0.0, 1.0),
         joint_pos={
             ".*_coxa": 0.0,
@@ -90,12 +90,12 @@ class EventsCfg:
 class RewardsCfg:
     alive = RewTerm(func=mdp.is_alive, weight=0.01)
     track_lin_vel = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=1)
-    track_ang_vel_z_exp = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=0.5)
+    track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=0.5)
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    joint_torques_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-7)
 
 
