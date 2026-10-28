@@ -30,7 +30,7 @@ JOINTS = [
 
 HEXAPOD_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
-    spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA), scale=(0.1,0.1,0.1)),
+    spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),  # USD가 이미 미터 단위라 scale 불필요
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.2),
         rot=(0.0, 0.0, 0.0, 1.0),
@@ -84,7 +84,7 @@ class TerminationsCfg:
 
 @configclass
 class SceneCfg(InteractiveSceneCfg):
-    light = AssetBaseCfg(prim_path="/World/light", spawn=sim_utils.DomeLightCfg(intensity=300, color=(0.0, 0.0, 0.0)))
+    light = AssetBaseCfg(prim_path="/World/light", spawn=sim_utils.DomeLightCfg(intensity=3000, color=(0.75, 0.75, 0.75)))
     ground = AssetBaseCfg(prim_path="/World/ground", spawn=sim_utils.GroundPlaneCfg())
     robot = HEXAPOD_CFG
 
