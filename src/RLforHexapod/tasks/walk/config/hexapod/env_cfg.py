@@ -1,3 +1,5 @@
+import math
+
 from isaaclab.assets import AssetBaseCfg, RigidObjectCfg
 
 from isaaclab.envs import (
@@ -32,17 +34,24 @@ HEXAPOD_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),  # USD가 이미 미터 단위라 scale 불필요
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.2),
+        # 서기 자세 (URDF FK 기준): femur 수평, tibia 수직에서 8° 바깥으로 벌림
+        # → 발끝이 몸통 원점 아래 0.157m, 바깥 0.27m. 발이 지면 위 ~1cm에서 시작
+        pos=(0.0, 0.0, 0.17),
         rot=(0.0, 0.0, 0.0, 1.0),
-        joint_pos={".*": 0.0},
+        joint_pos={
+            ".*_coxa": 0.0,
+            ".*_femur": math.radians(90.0),  # 0=아래로 수직, 90=수평 (한계 0~180)
+            ".*_tibia": math.radians(-170.0),  # -180=femur 수평일 때 수직 (한계 -180~0)
+        },
         joint_vel={".*": 0.0},
     ),
     actuators={
         "legs": ImplicitActuatorCfg(
             joint_names_expr=[".*"],   # 18개 관절 전부
             # USD 기본값(kp=100)은 링크 관성(~1e-4 kg·m²)에 비해 너무 커서 발산함
-            stiffness=10.0,
-            damping=0.3,
+            # 서기 하중(다리당 ~0.3-0.6Nm)에서 처짐 2° 이내가 되도록 kp=20
+            stiffness=20.0,
+            damping=0.5,
             # 감속기 반사 관성(MG996R 급 ~0.005-0.01). 0이면 가벼운 tibia가 불안정
             armature=0.005,
         ),
