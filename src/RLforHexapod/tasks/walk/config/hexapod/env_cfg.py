@@ -6,7 +6,7 @@ from isaaclab.envs import (
     ManagerBasedRLEnvCfg,
     VideoRecorderCfg,  # noqa: F401 -- used by the lesson 04 replacement
 )
-import isaaclab.envs.mdp as mdp
+import RLforHexapod.tasks.walk.mdp as mdp
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
