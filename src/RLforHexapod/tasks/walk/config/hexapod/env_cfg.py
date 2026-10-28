@@ -10,14 +10,16 @@ import isaaclab.envs.mdp as mdp
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
-from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.scene import InteractiveSceneCfg, SceneEntityCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import TerminationTermCfg as DoneTerm
+from isaaclab_tasks.manger_based.locomotion.velocity import mdp as loco_mdp
 from isaaclab.utils.configclass import configclass
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg, NewtonCollisionPipelineCfg, NewtonManager
+from isaaclab.sensors import ContactSensorCfg
 
 from RLforHexapod.assets import ROBOT_USDA
 
@@ -34,12 +36,12 @@ HEXAPOD_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.17),
+        pos=(0.0, 0.0, 1.0),
         rot=(0.0, 0.0, 0.0, 1.0),
         joint_pos={
             ".*_coxa": 0.0,
-            ".*_femur": math.radians(90.0),  # 0=아래로 수직, 90=수평 (한계 0~180)
-            ".*_tibia": math.radians(-170.0),  # -180=femur 수평일 때 수직 (한계 -180~0)
+            ".*_femur": math.radians(0.0),  # 0=아래로 수직, 90=수평 (한계 0~270)
+            ".*_tibia": math.radians(-210.0),  # -180=femur 수평일 때 수직 (한계 -270~0)
         },
         joint_vel={".*": 0.0},
     ),
@@ -58,7 +60,8 @@ HEXAPOD_CFG = ArticulationCfg(
 class ActionsCfg:
     # 모든 관절: 초기 자세 + 액션 × 0.5 rad 를 목표 각도로
     joint_pos = mdp.JointPositionActionCfg(
-        asset_name="robot", joint_names=[".*"], scale=0.5, use_default_offset=True
+        asset_name="robot", joint_names=[".*"], use_default_offset=True,
+        scale={".*_coxa":0.3, ".*_femur": 0.5, ".*_tibia": 0.5}, 
     )
 
 
@@ -90,13 +93,22 @@ class EventsCfg:
 class RewardsCfg:
     alive = RewTerm(func=mdp.is_alive, weight=0.01)
     track_lin_vel = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=1)
-    track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=0.5)
+    track_ang_vel_z_exp = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=0.5)
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    joint_torques_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-7)
+    feet_air_time = RewTerm(
+        func=loco_mdp.feet_air_time,
+        weight=0.5,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="tibia.*"),
+            "command_name": "base_velocity",
+            "threshold": 0.2,
+        }
+    )
 
 
 @configclass
@@ -111,6 +123,11 @@ class SceneCfg(InteractiveSceneCfg):
     light = AssetBaseCfg(prim_path="/World/light", spawn=sim_utils.DomeLightCfg(intensity=3000, color=(0.75, 0.75, 0.75)))
     ground = AssetBaseCfg(prim_path="/World/ground", spawn=sim_utils.GroundPlaneCfg())
     robot = HEXAPOD_CFG
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*",
+        history_length=3,
+        track_air_time=True,
+    )
 
 @configclass
 class CommandCfg:
