@@ -21,7 +21,7 @@ from isaaclab.utils.configclass import configclass
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg, NewtonCollisionPipelineCfg, NewtonManager
 from isaaclab.sensors import ContactSensorCfg
 
-from RLforHexapod.assets import ROBOT_USDA
+from RLforHexapod.assets import ROBOT_USDA, OBSTACLES_DIR
 
 JOINTS = [
     "L1_tibia", "L1_femur", "L1_coxa", 
@@ -173,6 +173,11 @@ class HexapodEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 20.0
         self.sim.physics = NewtonCfg(solver_cfg=MJWarpSolverCfg())
     
+
+@configclass
+class HexapodStairEnvCfg(HexapodEnvCfg):
+    scene: SceneCfg = StairsSceneCfg(num_envs=4, env_spacing=3.0)
+
 
 if __name__ == "__main__":
     sim = sim_utils.SimulationContext(
