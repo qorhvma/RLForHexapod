@@ -30,9 +30,9 @@ JOINTS = [
 
 HEXAPOD_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
-    spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),  # USD가 이미 미터 단위라 scale 불필요
+    spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.2),
+        pos=(0.0, 0.0, 1.0),
         rot=(0.0, 0.0, 0.0, 1.0),
         joint_pos={".*": 0.0},
         joint_vel={".*": 0.0},
@@ -40,8 +40,8 @@ HEXAPOD_CFG = ArticulationCfg(
     actuators={
         "legs": ImplicitActuatorCfg(
             joint_names_expr=[".*"],   # 18개 관절 전부
-            stiffness=None,
-            damping=None,
+            stiffness=0.0,
+            damping=0.0,
         ),
     },
 )
