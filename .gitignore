@@ -8,7 +8,6 @@ build/
 dist/
 
 outputs/
-videos/
 wandb/
 
 .vscode/settings.json
