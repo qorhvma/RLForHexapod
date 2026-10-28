@@ -1,0 +1,35 @@
+--- git commit ---
+c18b4f4fcf2c027861eabfbffbb101c432ecc919
+
+
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py b/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
+index dd22a0a..11d85d0 100644
+--- a/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
++++ b/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
+@@ -36,11 +36,11 @@ HEXAPOD_CFG = ArticulationCfg(
+     prim_path="{ENV_REGEX_NS}/Robot",
+     spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),
+     init_state=ArticulationCfg.InitialStateCfg(
+-        pos=(0.0, 0.0, 1.0),
++        pos=(0.0, 0.0, 0.2),
+         rot=(0.0, 0.0, 0.0, 1.0),
+         joint_pos={
+             ".*_coxa": 0.0,
+-            ".*_femur": math.radians(0.0),  # 0=아래로 수직, 90=수평 (한계 0~270)
++            ".*_femur": math.radians(145.0),  # 0=아래로 수직, 90=수평 (한계 0~270)
+             ".*_tibia": math.radians(-210.0),  # -180=femur 수평일 때 수직 (한계 -270~0)
+         },
+         joint_vel={".*": 0.0},

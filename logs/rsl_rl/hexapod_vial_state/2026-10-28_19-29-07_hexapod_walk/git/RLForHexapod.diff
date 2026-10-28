@@ -1,0 +1,30 @@
+--- git commit ---
+0f3231aa1c0b620699bdf5e71f81e05fbfac7c20
+
+
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   src/RLforHexapod/tasks/walk/config/hexapod/agents/rsl_rl_ppo_cfg.py
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/src/RLforHexapod/tasks/walk/config/hexapod/agents/rsl_rl_ppo_cfg.py b/src/RLforHexapod/tasks/walk/config/hexapod/agents/rsl_rl_ppo_cfg.py
+index 5eb9fbb..03b2129 100644
+--- a/src/RLforHexapod/tasks/walk/config/hexapod/agents/rsl_rl_ppo_cfg.py
++++ b/src/RLforHexapod/tasks/walk/config/hexapod/agents/rsl_rl_ppo_cfg.py
+@@ -15,7 +15,7 @@ class HexapodStatePPORunnerCfg(RslRlOnPolicyRunnerCfg):
+     save_interval = 50
+     experiment_name = "hexapod_vial_state"
+     run_name = ""
+-    obs_groups = {"actor": ["policy"], "critic": ["critic"]}
++    obs_groups = {"actor": ["policy"]}
+     clip_actions = 1.0
+     actor = RslRlMLPModelCfg(
+         hidden_dims=[256, 256, 128],
