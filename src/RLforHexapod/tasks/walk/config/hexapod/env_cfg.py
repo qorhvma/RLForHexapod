@@ -129,6 +129,16 @@ class SceneCfg(InteractiveSceneCfg):
         track_air_time=True,
     )
 
+
+@configclass
+class StairsSceneCfg(SceneCfg):
+    stairs = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Stairs",          # env마다 복제됨
+        spawn=sim_utils.UsdFileCfg(usd_path=str(OBSTACLES_DIR / "stairs_160mm.usda")),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.5, 0.0, 0.0)),  # 로봇 앞 0.5m
+    )
+
+
 @configclass
 class CommandCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
