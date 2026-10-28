@@ -123,6 +123,7 @@ class CommandCfg:
             lin_vel_y=(0.0, 0.0),
             ang_vel_z=(0.0, 0.0),
         ),
+        debug_vis=True,
     )
 
 @configclass
