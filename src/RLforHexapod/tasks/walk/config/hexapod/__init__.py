@@ -7,6 +7,7 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point":f"{_PACKAGE}.env_cfg:HexapodEnvCfg"
+        "env_cfg_entry_point":f"{_PACKAGE}.env_cfg:HexapodEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{_PACKAGE}.agetns.rsl_rl_ppo_cfg:HexapodStatePPORunnerCfg"
     },
 )
