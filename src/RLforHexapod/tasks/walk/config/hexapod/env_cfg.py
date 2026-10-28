@@ -93,7 +93,7 @@ class EventsCfg:
 class RewardsCfg:
     alive = RewTerm(func=mdp.is_alive, weight=0.01)
     track_lin_vel = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=1)
-    track_ang_vel_z_exp = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=0.5)
+    track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=0.5)
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
@@ -134,13 +134,13 @@ class CommandCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        heading_command=True,
-        heading_control_stiffness=0.5,
+        # heading_command=True,
+        # heading_control_stiffness=0.5,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 0.3),
+            lin_vel_x=(0.0, 0.5),
             lin_vel_y=(0.0, 0.0),
-            ang_vel_z=(-0.5, 0.5),
-            heading=(-math.pi, math.pi),
+            ang_vel_z=(0, 0),
+            # heading=(-math.pi, math.pi),
         ),
         debug_vis=True,
     )

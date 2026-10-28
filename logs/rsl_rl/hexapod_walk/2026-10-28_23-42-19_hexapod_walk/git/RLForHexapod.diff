@@ -1,0 +1,53 @@
+--- git commit ---
+861743b9712a879d86cf356b5369698da679b427
+
+
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	logs/rsl_rl/hexapod_walk/2026-10-28_23-42-19_hexapod_walk/
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py b/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
+index 790c67d..10a87ed 100644
+--- a/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
++++ b/src/RLforHexapod/tasks/walk/config/hexapod/env_cfg.py
+@@ -93,7 +93,7 @@ class EventsCfg:
+ class RewardsCfg:
+     alive = RewTerm(func=mdp.is_alive, weight=0.01)
+     track_lin_vel = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=1)
+-    track_ang_vel_z_exp = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=0.5)
++    track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=0.5)
+     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+@@ -134,13 +134,13 @@ class CommandCfg:
+     base_velocity = mdp.UniformVelocityCommandCfg(
+         asset_name="robot",
+         resampling_time_range=(10.0, 10.0),
+-        heading_command=True,
+-        heading_control_stiffness=0.5,
++        # heading_command=True,
++        # heading_control_stiffness=0.5,
+         ranges=mdp.UniformVelocityCommandCfg.Ranges(
+-            lin_vel_x=(0.0, 0.3),
++            lin_vel_x=(0.0, 0.5),
+             lin_vel_y=(0.0, 0.0),
+-            ang_vel_z=(-0.5, 0.5),
+-            heading=(-math.pi, math.pi),
++            ang_vel_z=(0, 0),
++            # heading=(-math.pi, math.pi),
+         ),
+         debug_vis=True,
+     )
