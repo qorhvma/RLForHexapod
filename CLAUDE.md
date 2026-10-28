@@ -6,3 +6,4 @@ isaacLab 3.0을 사용하되, isaacSim은 사용하지 않는다.
 구현 방식은, 
 우선 걷기, 계단 오르기 두 task로 진행한다.
 nivid 공식 SO101 arm의 Tutorial를 따라하여 증류 방식을 사용한다. (teacher 학습 후, student 증류)
+isaacLab 3.0과 개발 환경은 원격 컴퓨터에 설치되어 있다. 여기서 코딩 후 push, 원격 컴퓨터에서 pull해 실행하는 방식으로 개발한다.

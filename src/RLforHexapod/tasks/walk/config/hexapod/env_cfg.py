@@ -70,6 +70,11 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
+        base_ang_vel = ObsTerm(func=mdp.base_lin_ang)
+        projected_gravity = ObsTerm(func=mdp.projected_gravity)
+        command = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
+        last_action = ObsTerm(func=mdp.last_action)
 
         def __post_init__(self):
             self.concatenate_terms = True
@@ -85,12 +90,23 @@ class EventsCfg:
 
 @configclass
 class RewardsCfg:
-    alive = RewTerm(func=mdp.is_alive, weight=1.0)
+    alive = RewTerm(func=mdp.is_alive, weight=0.01)
+    track_lin_vel = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=1)
+    track_ang_vel_z_exp = RewTerm(func=mdp.track_lin_vel_xy_exp, params={"command_name": "base_velocity", "std": 0.5}, weight=0.5)
+    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+    lin_vel_xy_l2 = RewTerm(func=mdp.lin_vel_xy_l2, weight=-0.05)
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+    joint_torques_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-7)
 
 
 @configclass
 class TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
+    base_low = DoneTerm(func=mdp.root_height_below_minimum, params={"minimum_height": 0.05})
+    bad_ori  = DoneTerm(func=mdp.bad_orientation, params={"limit_angle": 1.0})  # 약 57°
+
 
 @configclass
 class SceneCfg(InteractiveSceneCfg):
@@ -98,6 +114,18 @@ class SceneCfg(InteractiveSceneCfg):
     ground = AssetBaseCfg(prim_path="/World/ground", spawn=sim_utils.GroundPlaneCfg())
     robot = HEXAPOD_CFG
 
+@configclass
+class CommandCfg:
+    base_velocity = mdp.UniformVelocityCommandCfg(
+        asset_name="robot",
+        resampling_time_range=(10.0, 10.0),
+        heading_command=False,
+        ranges=mdp.UniformVelocityCommandCfg.Ranges(
+            lin_vel_x=(0.0, 0.3),
+            lin_vel_y=(0.0, 0.0),
+            ang_vel_z=(0.0, 0.0),
+        ),
+    )
 
 @configclass
 class HexapodEnvCfg(ManagerBasedRLEnvCfg):
@@ -109,6 +137,7 @@ class HexapodEnvCfg(ManagerBasedRLEnvCfg):
     events: EventsCfg = EventsCfg()
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
+    commands: CommandCfg = CommandCfg()
 
     def __post_init__(self):
         self.decimation = 4
