@@ -1,5 +1,6 @@
 import torch
 from isaaclab.managers import SceneEntityCfg, ManagerTermBase, RewardTermCfg
+from isaaclab.utils.math import quat_apply
 
 
 # AI ======================================================
@@ -42,4 +43,38 @@ def feet_air_time(env, command_name: str, sensor_cfg: SceneEntityCfg, threshold:
     # 서 있으라는 명령(속도 ≈ 0)일 때는 보상 없음
     reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
     return reward
+
+
+class feet_clearance(ManagerTermBase):
+    """스윙 중인 발끝을 target_height까지 높이 들수록 보상 (가장 낮은 발 기준 높이)."""
+
+    def __init__(self, cfg: RewardTermCfg, env):
+        super().__init__(cfg, env)
+        asset_cfg: SceneEntityCfg = cfg.params["asset_cfg"]
+        self.asset = env.scene[asset_cfg.name]
+        # tibia 원점은 무릎 관절 → 발끝 = 원점 + 회전 × offset (URDF tibiatip 위치)
+        # URDF에서 L1 다리("tibia")만 tibia 프레임의 y 방향이 반대
+        names = [self.asset.body_names[i] for i in asset_cfg.body_ids]
+        self.tip_offset = torch.tensor(
+            [(-0.004, -0.147, -0.021) if n == "tibia" else (0.004, 0.147, -0.021) for n in names],
+            device=env.device,
+        )
+
+    def __call__(self, env, asset_cfg: SceneEntityCfg, command_name: str,
+                 target_height: float = 0.05, tanh_mult: float = 2.0):
+        data = self.asset.data
+        quat = data.body_quat_w.torch[:, asset_cfg.body_ids]
+        offset_w = quat_apply(quat, self.tip_offset.expand(quat.shape[0], -1, -1))
+        tip_z = data.body_pos_w.torch[:, asset_cfg.body_ids, 2] + offset_w[..., 2]
+        # 발끝 속도 = 무릎 속도 + ω × r
+        tip_vel = data.body_lin_vel_w.torch[:, asset_cfg.body_ids] + torch.cross(
+            data.body_ang_vel_w.torch[:, asset_cfg.body_ids], offset_w, dim=-1)
+        # 가장 낮은 발(지지 발) 기준 높이 → 평지/계단 모두 동작, target 이상은 보상 없음
+        height = torch.clamp(tip_z - tip_z.min(dim=1, keepdim=True).values, max=target_height)
+        # 수평으로 움직이는 발(스윙)만 인정 → 정지한 지지 발은 0
+        swing = torch.tanh(tanh_mult * torch.norm(tip_vel[..., :2], dim=-1))
+        reward = torch.sum(height * swing, dim=1) / target_height
+        # 서 있으라는 명령(속도 ≈ 0)일 때는 보상 없음
+        reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
+        return reward
 
