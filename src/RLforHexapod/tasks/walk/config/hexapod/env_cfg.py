@@ -36,12 +36,12 @@ HEXAPOD_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(usd_path=str(ROBOT_USDA)),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.2),
+        pos=(0.0, 0.0, 0.3),
         rot=(0.0, 0.0, 0.0, 1.0),
         joint_pos={
             ".*_coxa": 0.0,
-            ".*_femur": math.radians(145.0),  # 0=아래로 수직, 90=수평 (한계 0~270)
-            ".*_tibia": math.radians(-210.0),  # -180=femur 수평일 때 수직 (한계 -270~0)
+            ".*_femur": math.radians(20.0),  # 0=아래로 수직, 90=수평 (한계 0~270)
+            ".*_tibia": math.radians(-110.0),  # -180=femur 수평일 때 수직 (한계 -270~0)
         },
         joint_vel={".*": 0.0},
     ),
@@ -194,7 +194,7 @@ class HexapodEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 4
         self.sim.dt = 1.0 / 200.0  # 정책 50Hz (decimation 4)
         self.episode_length_s = 20.0
-        self.sim.physics = NewtonCfg(solver_cfg=MJWarpSolverCfg())
+        self.sim.physics = NewtonCfg(solver_cfg=MJWarpSolverCfg(), use_cuda_graph=True)
     
 
 @configclass
