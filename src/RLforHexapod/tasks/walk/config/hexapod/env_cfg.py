@@ -131,6 +131,8 @@ class StairsRewardsCfg:
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-7)
+    termination_penalty = RewTerm(func=mdp.is_terminated, weight=-10.0)
+
 # AI ===============================================
 
 
@@ -139,6 +141,12 @@ class TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     base_low = DoneTerm(func=mdp.root_height_below_minimum, params={"minimum_height": 0.05})
     bad_ori  = DoneTerm(func=mdp.bad_orientation, params={"limit_angle": 1.0})  # 약 57°
+
+
+@configclass
+class StairsTerminationsCfg(TerminationsCfg):
+    # 몸통 중심이 계단 폭(1.0m, stairs_*.usda의 y scale) 밖으로 나가면 실패
+    off_stairs = DoneTerm(func=mdp.out_of_stairs_width, params={"half_width": 0.5})
 
 
 @configclass
@@ -173,7 +181,7 @@ class CommandCfg:
             lin_vel_x=(0.0, 0.5),
             lin_vel_y=(0.0, 0.0),
             ang_vel_z=(0, 0),
-            heading=(-math.pi, math.pi),
+            heading=(0, 0),
         ),
         debug_vis=True,
     )
@@ -201,6 +209,7 @@ class HexapodEnvCfg(ManagerBasedRLEnvCfg):
 class HexapodStairEnvCfg(HexapodEnvCfg):
     scene: SceneCfg = StairsSceneCfg(num_envs=4, env_spacing=3.0)
     rewards: RewardsCfg = StairsRewardsCfg()
+    terminations: TerminationsCfg = StairsTerminationsCfg()
 
 
 if __name__ == "__main__":
