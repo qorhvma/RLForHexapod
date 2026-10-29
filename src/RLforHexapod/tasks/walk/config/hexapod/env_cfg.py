@@ -109,9 +109,18 @@ class RewardsCfg:
             "threshold": 0.2,
         }
     )
+    # 스윙 발끝을 가장 낮은 발보다 target_height(m)까지 들면 보상 (발 1개당 최대 1)
+    feet_clearance = RewTerm(
+        func=mdp.feet_clearance,
+        weight=0.2,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names="tibia.*"),
+            "command_name": "base_velocity",
+            "target_height": 0.05,
+        }
+    )
 
 
-# AI ===============================================
 @configclass
 class StairsRewardsCfg:
     track_lin_vel = RewTerm(func=mdp.track_lin_vel_xy_exp, weight=1.0,
@@ -127,11 +136,14 @@ class StairsRewardsCfg:
     feet_air_time = RewTerm(func=mdp.feet_air_time, weight=0.5, params={
         "sensor_cfg": SceneEntityCfg("contact_forces", body_names="tibia.*"),
         "command_name": "base_velocity", "threshold": 0.25})
+    # 계단 높이(160mm)를 넘길 만큼 발을 들도록 target을 크게
+    feet_clearance = RewTerm(func=mdp.feet_clearance, weight=0.3, params={
+        "asset_cfg": SceneEntityCfg("robot", body_names="tibia.*"),
+        "command_name": "base_velocity", "target_height": 0.18})
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-0.5)
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-0.2)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1e-7)
-# AI ===============================================
 
 
 @configclass
