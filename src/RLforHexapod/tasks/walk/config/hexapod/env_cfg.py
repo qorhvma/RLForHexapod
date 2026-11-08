@@ -165,7 +165,7 @@ class CommandCfg:
     base_height = mdp.BaseHeightCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        height_range=(0.06, 0.24),
+        height_range=(0.17, 0.24),
     )
 
 
