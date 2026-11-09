@@ -32,6 +32,29 @@ class tibia_vertical(ManagerTermBase):
         return torch.sum(score * contact, dim=1) / contact.sum(dim=1).clamp(min=1.0)
 
 
+class leg_self_contacts(ManagerTermBase):
+    """서로 다른 다리끼리 닿은 바디 쌍의 수 (N,). 음수 weight로 쓴다. weight = 쌍 하나당 초당 벌점.
+
+    tibia는 늘 땅을 딛고 있어 합력으로는 다리끼리 닿았는지 알 수 없다.
+    그래서 상대를 지정한 접촉 센서(filter_prim_paths_expr)의 바디 쌍별 힘을 쓴다.
+    센서 바디와 상대 바디가 같은 목록이면 한 쌍이 행렬에 두 번 나오므로 이름 순서로 한 번만 센다.
+    """
+
+    def __init__(self, cfg: RewardTermCfg, env):
+        super().__init__(cfg, env)
+        sensor = env.scene.sensors[cfg.params["sensor_name"]]
+        # 다리 번호 = 이름의 "_" 뒤 (femur_5 → "5"). L1의 바디는 접미사가 없어 ""이 된다
+        leg = lambda name: name.partition("_")[2]
+        self.counted = torch.tensor(
+            [[leg(a) != leg(b) and a < b for b in sensor.filter_object_names] for a in sensor.sensor_names],
+            dtype=torch.bool, device=env.device)
+
+    def __call__(self, env, sensor_name: str, threshold: float = 1.0):
+        force = env.scene.sensors[sensor_name].data.normal_force_matrix_w_history.torch  # (N, T, S, F, 3)
+        touching = torch.linalg.norm(force, dim=-1).amax(dim=1) > threshold
+        return (touching & self.counted).sum(dim=(1, 2)).float()
+
+
 def track_base_height_exp(env, command_name: str, std: float,
                           asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """몸통 높이 명령 추종: exp(-오차² / std²). 1 = 명령 높이와 같음."""

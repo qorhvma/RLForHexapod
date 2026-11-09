@@ -209,6 +209,12 @@ class StairsSceneCfg(SceneCfg):
     # 자기충돌을 켠다: 계단에서는 다리끼리 가까워져, 꺼져 있으면 서로 통과하는 동작을 배운다
     robot = HEXAPOD_CFG.replace(spawn=HEXAPOD_CFG.spawn.replace(
         articulation_props=[NewtonArticulationCfg(self_collision_enabled=True)]))
+    # 다리끼리의 접촉만 재는 센서: femur·tibia 바디 쌍별 힘 (leg_self_contacts 벌점이 읽는다)
+    leg_contacts = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*(femur|tibia).*",
+        filter_prim_paths_expr=["{ENV_REGEX_NS}/Robot/.*(femur|tibia).*"],
+        history_length=3,
+    )
     stairs = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Stairs",
         spawn=sim_utils.UsdFileCfg(
@@ -266,6 +272,9 @@ class StairsRewardsCfg:
     undesired_contacts = RewTerm(func=mdp.undesired_contacts, weight=-1.0, params={
         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["body", "femur.*", "coxa.*"]),
         "threshold": 1.0})
+    # 서로 다른 다리끼리 닿은 쌍 하나당 초당 벌점. 너무 크면 발을 옮기는 시도 자체를 포기한다
+    leg_self_contact = RewTerm(func=mdp.leg_self_contacts, weight=-2.0, params={
+        "sensor_name": "leg_contacts", "threshold": 1.0})
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-0.5)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
