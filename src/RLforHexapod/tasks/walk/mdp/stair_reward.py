@@ -5,6 +5,7 @@
     전진 → 앞발 옮기기 → 중간발 옮기기 → 전진 → 뒤 오른발 옮기기 → 뒤 왼발 옮기기
 
     전진:   몸통 x가 목표에 도달하면 완료
+    접기:   뒷발 앞 전진과 뒷발 옮기기는 앞다리를 접은 상태여야 완료 (fold=True인 단계)
     옮기기: 정해진 발(앞·중간은 두 발, 뒤는 한 발씩)을 들어 앞으로 보내고, 올라갈 단 위에 내려놓으면 완료
 
 보상
@@ -12,7 +13,7 @@
         전진:   몸통 x
         옮기기: 옮기는 발끝 높이 (tibia가 45° 이내이고 안쪽으로 접히지 않았을 때만)
                 몸통 x (옮기는 두 발이 단 높이 위에 있을 때만)
-        뒷발 옮기기: 앞다리를 수직면과 평행하게 돌린 정도
+        접기 단계: 앞다리를 수직면과 평행하게 돌린 정도
     단계 완료 보너스
     발마다 단계당 1번: 단 끝에 처음 닿을 때, 단 위에 처음 놓을 때
     tibia 수직도: 항상, 여섯 다리 평균
@@ -46,6 +47,7 @@ class Phase(NamedTuple):
     kind: int
     feet: tuple = ()         # 옮기는 발 (한 발 또는 두 발)
     body_x: float = 0.0      # 몸통 x의 보상 상한이자 전진 단계의 목표 (이번에 오를 단의 수직면 기준 [m])
+    fold: bool = False       # 앞다리를 접어야 끝나는 단계. 접기 점수도 이 단계에서만 준다
 
 
 # 몸통 x: 기본 자세에서 발끝은 몸통 기준 앞 +15cm, 중간 0, 뒤 -15cm. 그 발이 수직면을 넘을 만큼만 전진하고 보상을 멈춘다
@@ -53,12 +55,13 @@ PHASES = [
     Phase(ADVANCE, body_x=-0.20),
     Phase(MOVE, FRONT, -0.10),
     Phase(MOVE, MIDDLE, 0.05),
-    # 뒷발을 들기 전에 무게중심을 중간발보다 앞으로 옮긴다
-    Phase(ADVANCE, body_x=0.08),
+    # 뒷발을 들기 전에 무게중심을 중간발보다 앞으로 옮기면서 앞다리를 접는다.
+    # 앞발을 디딘 채 몸통이 전진하면 coxa가 접히는 방향으로 돌아가므로 한 동작이다
+    Phase(ADVANCE, body_x=0.08, fold=True),
     # 뒷발은 한 발씩: 나머지 뒷발이 받쳐 주어 지지 영역 뒤쪽 여유가 약 1cm에서 약 10cm가 된다
     # 첫 발 동안은 바닥에 남은 뒷발이 더 뒤로 뻗지 못하므로 몸통을 더 밀지 않는다
-    Phase(MOVE, (REAR[0],), 0.08),
-    Phase(MOVE, (REAR[1],), 0.20),
+    Phase(MOVE, (REAR[0],), 0.08, fold=True),
+    Phase(MOVE, (REAR[1],), 0.20, fold=True),
 ]
 NUM_PHASES = len(PHASES)
 PHASE_OBS_SIZE = NUM_PHASES + 1  # 표의 단계 + 정지
@@ -79,8 +82,9 @@ class StairGaitCfg:
     over_margin: float = 0.02    # 옮기기 완료: 발이 수직면을 이만큼 넘어 단 위에 닿음
     edge_reach: float = 0.015    # 단 끝 닿기: 발끝 추정점이 수직면보다 이만큼 앞이어도 인정 (실제 발 앞 끝은 추정점보다 1.1~1.6cm 앞)
 
-    # 뒷발 옮기기: 앞다리를 수직면과 평행하게 돌리면 앞발이 몸통 기준 +15cm에서 +9cm로 들어와 뒷발 자리가 생긴다
+    # 앞다리 접기: 수직면과 평행하게 돌리면 앞발이 몸통 기준 +15cm에서 +9cm로 들어와 뒷발 자리가 생긴다
     front_parallel_coxa: float = 0.96  # 앞다리가 수직면과 평행해지는 coxa 각도 크기 [rad] (55°, L4는 +, L3는 -)
+    front_fold_required: float = 0.9   # fold 단계를 끝내는 데 필요한 접힘 비율 (양쪽 앞다리 모두, 1 = 평행)
 
     # 접지
     tip_height: float = 0.013    # 딛었을 때 발끝 추정점이 지면보다 높은 만큼 (메시 최저점과의 차이)
@@ -119,7 +123,7 @@ class StairTracker:
         device, n, num_feet = env.device, env.num_envs, len(FOOT_BODIES)
         self.table_kind = torch.tensor([p.kind for p in PHASES], device=device)
         self.table_body_x = torch.tensor([p.body_x for p in PHASES], device=device)
-        self.table_rear_move = torch.tensor([bool(p.feet) and set(p.feet) <= set(REAR) for p in PHASES], device=device)
+        self.table_fold = torch.tensor([p.fold for p in PHASES], device=device)
         self.table_moving = torch.zeros(NUM_PHASES, num_feet, dtype=torch.bool, device=device)
         self.table_placed = torch.zeros(NUM_PHASES, num_feet, device=device)  # 이번 단에서 이미 올려놓은 발 (1 = 올려놓음)
         placed = []
@@ -254,8 +258,9 @@ class StairTracker:
         self.best_body_x = torch.where(body_counts, torch.maximum(self.best_body_x, capped_body_x), self.best_body_x)
         self.best_z = torch.where(z_counts, torch.maximum(self.best_z, capped_z), self.best_z)
 
-        # 보상: 뒷발 옮기기 중 앞다리를 평행하게 돌린 비율의 신기록 (두 다리의 합)
-        fold_counts = (moving_pair & self.table_rear_move[phase]).unsqueeze(1)
+        # 보상: 접기 단계에서 앞다리를 평행하게 돌린 비율의 신기록 (두 다리의 합)
+        needs_fold = in_stairs & self.table_fold[phase]
+        fold_counts = needs_fold.unsqueeze(1)
         self.fold_gain = ((fold - self.best_fold).clamp(min=0.0) * fold_counts).sum(1)
         self.best_fold = torch.where(fold_counts, torch.maximum(self.best_fold, fold), self.best_fold)
 
@@ -301,7 +306,9 @@ class StairTracker:
         self.settle_score = torch.exp(-(speed / gait.speed_std) ** 2) * settling * all_kept
 
         # 다음 단계로
-        self.just_done = ((advance_done | move_done) & all_kept) | settle_done
+        # 접기 단계는 지금 앞다리가 접혀 있어야 끝난다 (신기록이 아니라 현재 값)
+        fold_ok = (fold >= gait.front_fold_required).all(1) | ~needs_fold
+        self.just_done = ((advance_done | move_done) & all_kept & fold_ok) | settle_done
         self.move = self.move + self.just_done.long()
         self.need_init |= self.just_done
 
@@ -455,7 +462,7 @@ def stair_progress(env) -> torch.Tensor:
 
 
 def stair_front_fold(env) -> torch.Tensor:
-    """뒷발 옮기기 중 앞다리를 수직면과 평행하게 돌린 비율의 신기록, 두 다리의 합 (weight = 다리 하나를 끝까지 돌린 점수)."""
+    """접기 단계에서 앞다리를 수직면과 평행하게 돌린 비율의 신기록, 두 다리의 합 (weight = 다리 하나를 끝까지 돌린 점수)."""
     tracker = get_tracker(env)
     tracker.update()
     return tracker.fold_gain / env.step_dt
