@@ -20,6 +20,7 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.utils.configclass import configclass
 from isaaclab.utils.noise import GaussianNoiseCfg
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg, NewtonCollisionPipelineCfg, NewtonManager
+from isaaclab_newton.sim.schemas import NewtonArticulationCfg
 from isaaclab.sensors import ContactSensorCfg
 
 from RLforHexapod.assets import ROBOT_USDA, OBSTACLES_DIR
@@ -205,6 +206,9 @@ STAIRS = mdp.StairsGeometryCfg(x0=0.5, step_height=0.16)
 
 @configclass
 class StairsSceneCfg(SceneCfg):
+    # 자기충돌을 켠다: 계단에서는 다리끼리 가까워져, 꺼져 있으면 서로 통과하는 동작을 배운다
+    robot = HEXAPOD_CFG.replace(spawn=HEXAPOD_CFG.spawn.replace(
+        articulation_props=[NewtonArticulationCfg(self_collision_enabled=True)]))
     stairs = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Stairs",
         spawn=sim_utils.UsdFileCfg(

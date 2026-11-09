@@ -84,7 +84,9 @@ class StairGaitCfg:
 
     # 앞다리 접기: 수직면과 평행하게 돌리면 앞발이 몸통 기준 +15cm에서 +9cm로 들어와 뒷발 자리가 생긴다
     front_parallel_coxa: float = 0.96  # 앞다리가 수직면과 평행해지는 coxa 각도 크기 [rad] (55°, L4는 +, L3는 -)
-    front_fold_required: float = 0.9   # fold 단계를 끝내는 데 필요한 접힘 비율 (양쪽 앞다리 모두, 1 = 평행)
+    # fold 단계를 끝내는 데 필요한 접힘 비율 (양쪽 앞다리 모두, 1 = 평행). 0.8 = coxa 0.77 rad
+    # 자기충돌에서 L4 femur가 몸통 볼록 껍질에 닿는 coxa가 0.83~0.86 rad라 그보다 작아야 한다
+    front_fold_required: float = 0.8
 
     # 접지
     tip_height: float = 0.013    # 딛었을 때 발끝 추정점이 지면보다 높은 만큼 (메시 최저점과의 차이)
