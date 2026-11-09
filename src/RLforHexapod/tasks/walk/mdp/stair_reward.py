@@ -87,6 +87,9 @@ class StairGaitCfg:
     # fold 단계를 끝내는 데 필요한 접힘 비율 (양쪽 앞다리 모두, 1 = 평행). 0.8 = coxa 0.77 rad
     # 자기충돌에서 L4 femur가 몸통 볼록 껍질에 닿는 coxa가 0.83~0.86 rad라 그보다 작아야 한다
     front_fold_required: float = 0.8
+    # 뒷발을 옮기는 단계를 끝내는 데 필요한 접힘 비율. 0.6 = coxa 0.58 rad
+    # 전진 단계가 0.8에서 바로 끝나므로, 같은 기준이면 몸통이 1cm만 밀려도 착지가 인정되지 않는다
+    front_fold_hold: float = 0.6
 
     # 접지
     tip_height: float = 0.013    # 딛었을 때 발끝 추정점이 지면보다 높은 만큼 (메시 최저점과의 차이)
@@ -309,7 +312,9 @@ class StairTracker:
 
         # 다음 단계로
         # 접기 단계는 지금 앞다리가 접혀 있어야 끝난다 (신기록이 아니라 현재 값)
-        fold_ok = (fold >= gait.front_fold_required).all(1) | ~needs_fold
+        # 전진은 접는 단계라 기준이 높고, 뒷발 옮기기는 접힌 상태를 대체로 유지하면 된다
+        fold_required = torch.where(kind == ADVANCE, gait.front_fold_required, gait.front_fold_hold)
+        fold_ok = (fold >= fold_required.unsqueeze(1)).all(1) | ~needs_fold
         self.just_done = ((advance_done | move_done) & all_kept & fold_ok) | settle_done
         self.move = self.move + self.just_done.long()
         self.need_init |= self.just_done
