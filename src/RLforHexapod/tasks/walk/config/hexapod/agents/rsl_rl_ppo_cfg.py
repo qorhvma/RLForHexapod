@@ -46,3 +46,4 @@ class HexapodStairPPORunnerCfg(HexapodStatePPORunnerCfg):
     """계단 teacher: 설정은 걷기와 같고 로그 폴더만 나눈다. 2026-11-07 이전 계단 로그는 hexapod_walk 폴더에 있다."""
 
     experiment_name = "hexapod_stair"
+    clip_actions = 2.0

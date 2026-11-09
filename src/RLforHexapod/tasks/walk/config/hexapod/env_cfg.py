@@ -173,7 +173,7 @@ class CommandCfg:
     base_height = mdp.BaseHeightCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        height_range=(0.06, 0.24),
+        height_range=(0.17, 0.24),
     )
 
 
@@ -194,7 +194,7 @@ class HexapodEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 4
         self.sim.dt = 1.0 / 200.0  # 정책 50Hz (decimation 4)
         self.episode_length_s = 20.0
-        self.sim.physics = NewtonCfg(solver_cfg=MJWarpSolverCfg(), use_cuda_graph=True)
+        self.sim.physics = NewtonCfg(solver_cfg=MJWarpSolverCfg(nconmax=100, njmax=256), use_cuda_graph=True)
         # Isaac Sim 대비 환경 설정이 간편함, 병렬 학습 속도는 비슷 비슷, 오픈소스라 마개조 가능, 다만 신버전이라 지원이 부족할 수 있음.
     
 
