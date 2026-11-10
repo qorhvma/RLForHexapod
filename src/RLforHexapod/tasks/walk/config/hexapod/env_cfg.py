@@ -405,3 +405,95 @@ class StudentTopEndTerminationsCfg(StairsTerminationsCfg):
 @configclass
 class HexapodStairStudentATopEndEnvCfg(HexapodStairStudentAEnvCfg):
     terminations: TerminationsCfg = StudentTopEndTerminationsCfg()
+
+
+# 걷기·계단 통합 student =============================================
+# 모든 env에 계단이 있고, 걷기 env만 계단 뒤쪽 평지에서 시작한다.
+# 걷기는 0.2m/s로 20초, 최대 4m 움직인다. 4m 뒤에서 시작하면 자기 계단(x +0.5부터)에 닿지 않고,
+# 간격 10m면 뒤쪽 env의 계단(끝이 x -8.1)에도 닿지 않는다
+
+WALK_START_X = -4.0
+MIXED_ENV_SPACING = 10.0
+
+
+@configclass
+class MixedSceneCfg(StairsSceneCfg):
+    leg_contacts = None  # 벌점용 센서. 증류는 보상을 쓰지 않는다
+
+
+@configclass
+class MixedEventsCfg(StairsEventsCfg):
+    stair_reset = EventTerm(func=mdp.reset_mixed_state, mode="reset", params={
+        "x_ranges": ((-0.1, 0.1), (0.30, 0.32)), "buffer_ratio": 0.0, "walk_start_x": WALK_START_X})
+
+
+@configclass
+class MixedRewardsCfg:
+    # 증류는 보상을 쓰지 않는다. StairTracker 갱신과 계단 지표 기록을 위해 이 항목만 둔다
+    phase_bonus = RewTerm(func=mdp.stair_phase_bonus, weight=1.0)
+
+
+@configclass
+class MixedTerminationsCfg(StudentTopEndTerminationsCfg):
+    # 각 teacher를 학습할 때와 같은 조건으로 끝낸다
+    bad_ori = DoneTerm(func=mdp.mixed_bad_orientation, params={"stair_limit": 0.5, "walk_limit": 1.0})
+    off_stairs = DoneTerm(func=mdp.stair_out_of_width, params={"half_width": STAIRS.width/2})
+    walk_time_out = DoneTerm(func=mdp.walk_time_out, params={"time_s": 20.0}, time_out=True)
+
+
+@configclass
+class MixedStudentObservationsCfg(StudentAObservationsCfg):
+    """policy = 계단 teacher, walk_teacher = 걷기 teacher, student = 실물에서 얻을 수 있는 값."""
+
+    @configclass
+    class StudentCfg(StudentAObservationsCfg.StudentCfg):
+        # 조종기 명령 (4). 계단 env에는 "전진하며 높게 서기"를 보여 준다
+        command = ObsTerm(func=mdp.student_command, params={"stair_velocity": (0.2, 0.0, 0.0), "stair_height": 0.24})
+
+    @configclass
+    class TeacherSelectorCfg(ObsGroup):
+        is_stair = ObsTerm(func=mdp.stair_env_flag)
+
+        def __post_init__(self):
+            self.concatenate_terms = True
+
+    student: StudentCfg = StudentCfg()
+    walk_teacher: ObservationsCfg.PolicyCfg = ObservationsCfg.PolicyCfg()
+    teacher_selector: TeacherSelectorCfg = TeacherSelectorCfg()
+
+
+@configclass
+class MixedStudentBObservationsCfg(MixedStudentObservationsCfg):
+    @configclass
+    class StudentCfg(MixedStudentObservationsCfg.StudentCfg):
+        # 서보 출력을 읽지 못하는 경우. 관절 정보는 last_action(명령값)뿐이다
+        joint_pos = None
+        joint_vel = None
+
+    student: StudentCfg = StudentCfg()
+
+
+@configclass
+class HexapodMixedStudentEnvCfg(HexapodStairStudentAEnvCfg):
+    scene: SceneCfg = MixedSceneCfg(num_envs=4, env_spacing=MIXED_ENV_SPACING)
+    observations: ObservationsCfg = MixedStudentObservationsCfg()
+    events: EventsCfg = MixedEventsCfg()
+    rewards: RewardsCfg = MixedRewardsCfg()
+    terminations: TerminationsCfg = MixedTerminationsCfg()
+    stair_ratio: float = 0.5  # 계단 env 비율
+
+
+@configclass
+class HexapodMixedStudentBEnvCfg(HexapodMixedStudentEnvCfg):
+    observations: ObservationsCfg = MixedStudentBObservationsCfg()
+
+
+# 확인용: 통합 학습 전에 한쪽씩만 증류한다
+@configclass
+class HexapodWalkOnlyStudentEnvCfg(HexapodMixedStudentEnvCfg):
+    stair_ratio: float = 0.0
+
+
+@configclass
+class HexapodStairOnlyStudentEnvCfg(HexapodMixedStudentEnvCfg):
+    stair_ratio: float = 1.0

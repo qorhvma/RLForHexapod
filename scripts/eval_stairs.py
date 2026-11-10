@@ -7,6 +7,12 @@ teacher와 student를 같은 조건으로 비교한다.
 
     uv run python scripts/eval_stairs.py --task Hexapod-Stair --checkpoint <teacher.pt>
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A --checkpoint <student.pt>
+
+걷기·계단 통합 task(Hexapod-Student-*)는 그룹별로 나눠 보고한다. 걷기는 첫 에피소드의 유지 비율과 명령 추종 오차를 잰다.
+--teacher를 주면 같은 조건에서 teacher 묶음으로 움직여 기준 성능을 잰다.
+
+    uv run python scripts/eval_stairs.py --task Hexapod-Student-A --checkpoint <teachers.pt> --teacher
+    uv run python scripts/eval_stairs.py --task Hexapod-Student-A --checkpoint <student.pt>
 """
 
 import argparse
@@ -17,10 +23,11 @@ import sys
 import torch
 
 START_NAMES = {0: "0번 (계단 앞)", 1: "1번 (앞발이 수직면 앞)"}
+FAIL_TERMS = ("base_low", "bad_ori", "sim_nan", "sim_blowup")  # 걷기에서 넘어지거나 물리가 터진 종료
 
 
-def collect_first_episodes(env, policy, obs, tracker, termination_manager, max_steps):
-    """환경마다 첫 에피소드가 끝날 때까지 돌리고 결과를 모은다."""
+def collect_first_episodes(env, policy, obs, tracker, termination_manager, max_steps, on_step=None):
+    """환경마다 첫 에피소드가 끝날 때까지 돌리고 결과를 모은다. on_step(dones, finished)는 step마다 불린다."""
     term_names = termination_manager.active_terms
     start = tracker.move.clone()
     ended = torch.zeros_like(start)
@@ -34,6 +41,8 @@ def collect_first_episodes(env, policy, obs, tracker, termination_manager, max_s
             obs, _, dones, _ = env.step(policy(obs))
             dones = dones.bool()
             policy.reset(dones)  # student의 기억을 에피소드마다 비운다
+            if on_step is not None:
+                on_step(dones, finished)
 
             # step 안에서 리셋까지 끝났으므로, 끝난 환경의 tracker.move는 이미 다음 에피소드 값이다
             move = torch.where(dones, tracker.ended_move, tracker.move)
@@ -116,6 +125,48 @@ def format_report(data, final_advance, done_move, step_dt):
     return "\n".join(lines)
 
 
+def walk_meter(env, mask):
+    """걷기 env의 첫 에피소드 동안 명령 추종 오차를 누적한다. (on_step, 합계 (N, 3), step 수 (N,))"""
+    robot = env.scene["robot"]
+    commands = env.command_manager
+    totals = torch.zeros(env.num_envs, 3, device=env.device)
+    steps = torch.zeros(env.num_envs, device=env.device)
+
+    def on_step(dones, finished):
+        # 리셋된 env의 상태는 다음 에피소드 값이므로 세지 않는다
+        active = mask & ~finished & ~dones
+        velocity = commands.get_command("base_velocity")
+        height = commands.get_command("base_height")[:, 0]
+        data = robot.data
+        base_z = data.root_pos_w.torch[:, 2] - env.scene.env_origins[:, 2]
+        errors = torch.stack([
+            (velocity[:, :2] - data.root_lin_vel_b.torch[:, :2]).norm(dim=1),
+            (velocity[:, 2] - data.root_ang_vel_b.torch[:, 2]).abs(),
+            (height - base_z).abs(),
+        ], dim=1)
+        totals[active] += errors[active]
+        steps[active] += 1.0
+
+    return on_step, totals, steps
+
+
+def format_walk_report(data, mask, totals, steps):
+    """걷기 env의 결과를 글로 만든다."""
+    reasons = data["reasons"][mask]
+    names = data["term_names"]
+    survived = reasons[:, names.index("walk_time_out")].float().mean().item()
+    fail_ids = [names.index(n) for n in FAIL_TERMS if n in names]
+    failed = reasons[:, fail_ids].any(dim=1).float().mean().item()
+    xy, yaw, height = (totals[mask].sum(dim=0) / steps[mask].sum().clamp_min(1.0)).tolist()
+    return "\n".join([
+        f"[걷기] {mask.sum().item()}대",
+        f"  20초 유지:   {survived:.1%}",
+        f"  넘어짐/오류: {failed:.1%}",
+        f"  속도 오차:   xy {xy:.3f} m/s, yaw {yaw:.3f} rad/s",
+        f"  높이 오차:   {height * 100:.2f} cm",
+    ])
+
+
 def main():
     import gymnasium as gym
 
@@ -127,10 +178,12 @@ def main():
     from isaaclab_tasks.utils import resolve_task_config, setup_preset_cli
 
     import RLforHexapod.tasks  # noqa: F401
+    from RLforHexapod.tasks.walk.mdp import stair_env_mask
 
     parser = argparse.ArgumentParser(description="저장된 정책의 계단 오르기 평가")
     parser.add_argument("--task", required=True, help="Hexapod-Stair 또는 Hexapod-Stair-Student-*")
     parser.add_argument("--checkpoint", required=True, help="불러올 .pt 파일")
+    parser.add_argument("--teacher", action="store_true", help="student 대신 teacher로 움직여 기준 성능을 잰다")
     parser.add_argument("--num_envs", type=int, default=4096)
     parser.add_argument("--seed", type=int, default=42)
     add_launcher_args(parser)
@@ -155,18 +208,29 @@ def main():
         print(f"[INFO] 체크포인트: {args.checkpoint}")
         runner.load(args.checkpoint)
         policy = runner.get_inference_policy(device=env.unwrapped.device)
+        if args.teacher:
+            policy = runner.alg.teacher
 
-        tracker = env.unwrapped.stair_tracker
+        base_env = env.unwrapped
+        tracker = base_env.stair_tracker
+        is_stair = stair_env_mask(base_env)
+        is_walk = ~is_stair
+        on_step, walk_totals, walk_steps = walk_meter(base_env, is_walk) if is_walk.any() else (None, None, None)
         data = collect_first_episodes(
             env,
             policy,
             env.get_observations(),
             tracker,
-            env.unwrapped.termination_manager,
-            env.unwrapped.max_episode_length + 1,
+            base_env.termination_manager,
+            base_env.max_episode_length + 1,
+            on_step,
         )
-        print(f"\n===== {args.task} =====")
-        print(format_report(data, tracker.final_advance, tracker.done_move, env.unwrapped.step_dt))
+        print(f"\n===== {args.task} ({'teacher' if args.teacher else 'student'}) =====")
+        if is_stair.any():
+            stair_data = {k: v[is_stair] if torch.is_tensor(v) else v for k, v in data.items()}
+            print(format_report(stair_data, tracker.final_advance, tracker.done_move, base_env.step_dt))
+        if is_walk.any():
+            print(format_walk_report(data, is_walk, walk_totals, walk_steps))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v -E '\\\\.\\(stl|STL|obj|dae|png|jpg|mp4\\)$')",
+      "Bash(git check-ignore *)"
+    ]
+  }
+}

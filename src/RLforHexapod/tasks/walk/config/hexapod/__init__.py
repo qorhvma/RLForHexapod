@@ -81,3 +81,43 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{_PACKAGE}.agents.rsl_rl_distillation_cfg:HexapodStudentMem256RunnerCfg"
     },
 )
+
+gym.register(
+    id="Hexapod-Student-A",
+    entry_point=f"{_PACKAGE}.hexapod_env:HexapodEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point":f"{_PACKAGE}.env_cfg:HexapodMixedStudentEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{_PACKAGE}.agents.rsl_rl_distillation_cfg:HexapodMixedStudentRunnerCfg"
+    },
+)
+
+gym.register(
+    id="Hexapod-Student-B",
+    entry_point=f"{_PACKAGE}.hexapod_env:HexapodEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point":f"{_PACKAGE}.env_cfg:HexapodMixedStudentBEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{_PACKAGE}.agents.rsl_rl_distillation_cfg:HexapodMixedStudentBRunnerCfg"
+    },
+)
+
+gym.register(
+    id="Hexapod-Student-A-WalkOnly",
+    entry_point=f"{_PACKAGE}.hexapod_env:HexapodEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point":f"{_PACKAGE}.env_cfg:HexapodWalkOnlyStudentEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{_PACKAGE}.agents.rsl_rl_distillation_cfg:HexapodWalkOnlyStudentRunnerCfg"
+    },
+)
+
+gym.register(
+    id="Hexapod-Student-A-StairOnly",
+    entry_point=f"{_PACKAGE}.hexapod_env:HexapodEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point":f"{_PACKAGE}.env_cfg:HexapodStairOnlyStudentEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{_PACKAGE}.agents.rsl_rl_distillation_cfg:HexapodStairOnlyStudentRunnerCfg"
+    },
+)
