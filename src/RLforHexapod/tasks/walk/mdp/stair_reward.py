@@ -452,7 +452,8 @@ def reset_mixed_state(env, env_ids, x_ranges, walk_start_x: float, buffer_ratio:
     if len(stair_ids):
         reset_stair_state(env, stair_ids, x_ranges, buffer_ratio)
     if len(walk_ids):
-        get_tracker(env).reset(walk_ids, torch.zeros_like(walk_ids))
+        # env_ids는 Int32로 올 수 있으므로 단계 번호(Long) 타입을 직접 지정한다
+        get_tracker(env).reset(walk_ids, torch.zeros(len(walk_ids), dtype=torch.long, device=env.device))
         asset = env.scene["robot"]
         pose = asset.data.default_root_pose.torch[walk_ids].clone()
         pose[:, :3] += env.scene.env_origins[walk_ids]
