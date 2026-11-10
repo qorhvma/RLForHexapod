@@ -19,4 +19,4 @@ logs
 cad/onshape_export/*
 !cad/onshape_export/config.json
 
-!logs/teachers.pt
+!logs/rsl_rl/teachers.pt
