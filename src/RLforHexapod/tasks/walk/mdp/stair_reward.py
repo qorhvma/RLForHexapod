@@ -31,6 +31,7 @@ from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import quat_apply
 
 from .observations import stair_env_mask, stairs_terrain_height, tip_offsets
+from .phase_estimator import PhaseEstimator
 
 # ===== 다리 =====
 # 라이다 쪽이 앞(+x)이다 (scripts/postprocess_urdf.py에서 몸통을 180° 돌림)
@@ -105,6 +106,37 @@ class StairGaitCfg:
     save_speed_max: float = 0.5  # 이 속도 이하로 안정적일 때만 시작 상태로 저장
 
 
+class PhaseMeasurement(NamedTuple):
+    """단계 판정에 쓰는 측정값. StairTracker는 참값을, PhaseEstimator는 오차를 더한 값을 넣는다."""
+
+    body_x: torch.Tensor      # 몸통 x, env 원점 기준 (N,)
+    tips: torch.Tensor        # 발끝 위치, env 원점 기준 (N, 6, 3)
+    in_contact: torch.Tensor  # 발 접촉 (N, 6)
+    front_coxa: torch.Tensor  # 앞다리 coxa 각도 [rad] (N, 2)
+    speed: torch.Tensor       # 몸통 속도 크기 (N,)
+
+
+class PhaseCheck(NamedTuple):
+    """check_phase의 결과. 보상 계산에 필요한 중간값도 함께 돌려준다."""
+
+    riser: torch.Tensor
+    top: torch.Tensor
+    moving: torch.Tensor
+    moving_pair: torch.Tensor
+    settling: torch.Tensor
+    needs_fold: torch.Tensor
+    fold: torch.Tensor
+    capped_body_x: torch.Tensor
+    start_best_body_x: torch.Tensor  # 이번 step 갱신 전 신기록
+    best_body_x: torch.Tensor        # 이번 step 갱신 후 신기록
+    body_counts: torch.Tensor
+    on_target: torch.Tensor
+    feet_kept: torch.Tensor
+    all_kept: torch.Tensor
+    steady_time: torch.Tensor
+    done: torch.Tensor               # 이번 step에 단계 완료
+
+
 class StairTracker:
     """env별 진행 상태를 보관하고, step마다 한 번 진행 상태와 점수를 계산한다."""
 
@@ -164,20 +196,30 @@ class StairTracker:
         self.backward_speed = torch.zeros(n, device=device)
         self.settle_score = torch.zeros(n, device=device)
 
+        # student가 받을 추정 단계. phase_error 설정이 있는 task만 만든다
+        self.front_feet = FRONT
+        error_cfg = getattr(env.cfg, "phase_error", None)
+        self.estimator = PhaseEstimator(self, error_cfg) if error_cfg is not None else None
+
     # ----- 지금 단계 -----
-    def phase_and_level(self):
+    def phase_and_level(self, move=None):
         """표의 몇 번째 단계인지, 몇 번째 단(바닥 = 0)을 오르는 중인지.
         마지막 전진과 정지는 "꼭대기 다음 단을 시작하는 전진"과 같은 값으로 계산한다."""
-        climbing = self.move.clamp(max=self.final_advance)
+        climbing = (self.move if move is None else move).clamp(max=self.final_advance)
         return climbing % NUM_PHASES, climbing // NUM_PHASES
+
+    def phase_one_hot(self, move):
+        """단계 번호 → one-hot (N, PHASE_OBS_SIZE). 마지막 칸 = 정지."""
+        phase, _ = self.phase_and_level(move)
+        return F.one_hot(torch.where(move >= self.settle_move, NUM_PHASES, phase), PHASE_OBS_SIZE).float()
 
     def riser_and_top(self, level):
         """이번에 오를 단의 수직면 x와 윗면 높이."""
         return self.stairs.x0 + level * self.stairs.tread, (level + 1) * self.stairs.step_height
 
-    def moving_feet(self, phase):
+    def moving_feet(self, phase, move=None):
         """지금 옮기는 발 (N, 6). 전진과 정지 중에는 없음."""
-        return self.table_moving[phase] & (self.move < self.final_advance).unsqueeze(1)
+        return self.table_moving[phase] & ((self.move if move is None else move) < self.final_advance).unsqueeze(1)
 
     def knees_and_tips(self):
         """무릎과 발끝 추정 위치 (env 원점 기준). 각각 (N, 6, 3). 발끝 = 무릎 위치 + 회전 × offset."""
@@ -202,6 +244,68 @@ class StairTracker:
         forward[:, 0] = 1.0
         return pose[:, :3] - self.env.scene.env_origins, quat_apply(pose[:, 3:7], forward)[:, 1]
 
+    # ----- 단계 판정 -----
+    def check_phase(self, move, best_body_x, need_init, steady_time, m: PhaseMeasurement) -> PhaseCheck:
+        """측정값으로 이번 step에 단계가 끝나는지 판정한다. 상태를 바꾸지 않는다.
+        StairTracker(참값)와 PhaseEstimator(오차 있는 값)가 같은 조건을 쓰도록 여기에 모았다."""
+        gait = self.gait
+        phase, level = self.phase_and_level(move)
+        riser, top = self.riser_and_top(level)
+        moving = self.moving_feet(phase, move)
+        kind = self.table_kind[phase]
+        in_stairs = move < self.final_advance
+        advancing = (kind == ADVANCE) & (move <= self.final_advance)
+        moving_pair = (kind == MOVE) & in_stairs
+        settling = move == self.settle_move
+
+        tips = m.tips
+        terrain = stairs_terrain_height(self.stairs, tips[..., 0], tips[..., 1])
+        near_ground = (tips[..., 2] - terrain - gait.tip_height).abs() < gait.contact_tol
+
+        # 몸통 x: 보상 상한으로 자른 값의 신기록. 새 단계의 첫 step은 지금 값에서 시작
+        limit_x = riser + self.table_body_x[phase]
+        capped_body_x = torch.minimum(m.body_x, limit_x)
+        start_best = torch.where(need_init, capped_body_x, best_body_x)
+
+        # 옮기는 중 몸통 x는 옮기는 발이 모두 단 높이 위에 있을 때만 인정한다 (들기 전에 전진하면 발이 수직면에 막힌다)
+        feet_up = ((tips[..., 2] >= top.unsqueeze(1)) | ~moving).all(1)
+        body_counts = advancing | (moving_pair & feet_up)
+        new_best = torch.where(body_counts, torch.maximum(start_best, capped_body_x), start_best)
+
+        # 앞다리를 수직면과 평행한 각도까지 돌린 비율 (0 = 기본 자세, 1 = 평행)
+        fold = (m.front_coxa / self.front_parallel).clamp(max=1.0)
+        needs_fold = in_stairs & self.table_fold[phase]
+
+        # 단계 완료 조건
+        advance_done = advancing & (new_best >= limit_x - gait.advance_tol)
+        over_riser = tips[..., 0] >= (riser + gait.over_margin).unsqueeze(1)
+        on_target = over_riser & (terrain >= top.unsqueeze(1) - 1e-3) & near_ground & m.in_contact
+        move_done = moving_pair & (on_target | ~moving).all(1)
+
+        # 옮기지 않는 발은 지금까지 올린 단에 있어야 단계를 끝낼 수 있다
+        placed_height = (level.unsqueeze(1) + self.table_placed[phase]) * self.stairs.step_height
+        feet_kept = ((terrain >= placed_height - 1e-3) & near_ground) | moving
+        all_kept = feet_kept.all(1)
+
+        # 정지: 여섯 발이 꼭대기에 있고 몸통이 멈춤. 멈춘 상태가 끊기면 시간을 처음부터 다시 잰다
+        steady = settling & all_kept & m.in_contact.all(1) & (m.speed < gait.speed_tol)
+        new_steady_time = torch.where(steady, steady_time + self.env.step_dt, torch.zeros_like(steady_time))
+        settle_done = settling & (new_steady_time >= gait.hold_time)
+
+        # 접기 단계는 지금 앞다리가 접혀 있어야 끝난다 (신기록이 아니라 현재 값)
+        # 전진은 접는 단계라 기준이 높고, 뒷발 옮기기는 접힌 상태를 대체로 유지하면 된다
+        fold_required = torch.where(kind == ADVANCE, gait.front_fold_required, gait.front_fold_hold)
+        fold_ok = (fold >= fold_required.unsqueeze(1)).all(1) | ~needs_fold
+        done = ((advance_done | move_done) & all_kept & fold_ok) | settle_done
+
+        return PhaseCheck(
+            riser=riser, top=top, moving=moving, moving_pair=moving_pair, settling=settling,
+            needs_fold=needs_fold, fold=fold, capped_body_x=capped_body_x,
+            start_best_body_x=start_best, best_body_x=new_best, body_counts=body_counts,
+            on_target=on_target, feet_kept=feet_kept, all_kept=all_kept,
+            steady_time=new_steady_time, done=done,
+        )
+
     # ----- step마다 한 번 -----
     def update(self):
         counter = self.env.common_step_counter
@@ -210,31 +314,24 @@ class StairTracker:
         self._updated_at = counter
 
         gait = self.gait
-        phase, level = self.phase_and_level()
-        riser, top = self.riser_and_top(level)
-        moving = self.moving_feet(phase)
-        kind = self.table_kind[phase]
-        in_stairs = self.move < self.final_advance
-        advancing = (kind == ADVANCE) & (self.move <= self.final_advance)
-        moving_pair = (kind == MOVE) & in_stairs
-        settling = self.move == self.settle_move
-
         knees, tips = self.knees_and_tips()
-        terrain = stairs_terrain_height(self.stairs, tips[..., 0], tips[..., 1])
         air_time = self.sensor.data.current_air_time.torch[:, self.sensor_ids]
-        near_ground = (tips[..., 2] - terrain - gait.tip_height).abs() < gait.contact_tol
-        body_x = self.body_state()[0][:, 0]
+        speed = self.asset.data.root_vel_w.torch.norm(dim=1)
+        measured = PhaseMeasurement(
+            body_x=self.body_state()[0][:, 0],
+            tips=tips,
+            in_contact=air_time == 0,
+            front_coxa=self.asset.data.joint_pos.torch[:, self.front_coxa_ids],
+            speed=speed,
+        )
+        c = self.check_phase(self.move, self.best_body_x, self.need_init, self.steady_time, measured)
+        riser, top, moving, moving_pair, settling = c.riser, c.top, c.moving, c.moving_pair, c.settling
+        fold, on_target, all_kept = c.fold, c.on_target, c.all_kept
 
         # 현재 값 (보상 상한으로 자른 값)
-        limit_x = riser + self.table_body_x[phase]
-        capped_body_x = torch.minimum(body_x, limit_x)
         capped_z = torch.minimum(tips[..., 2], (top + gait.tip_height + gait.raise_reward_cap).unsqueeze(1))
 
-        # 앞다리를 수직면과 평행한 각도까지 돌린 비율 (0 = 기본 자세, 1 = 평행)
-        fold = (self.asset.data.joint_pos.torch[:, self.front_coxa_ids] / self.front_parallel).clamp(max=1.0)
-
         # 새 단계의 첫 step: 신기록을 지금 값으로
-        self.best_body_x = torch.where(self.need_init, capped_body_x, self.best_body_x)
         self.best_z = torch.where(self.need_init.unsqueeze(1), capped_z, self.best_z)
         self.best_fold = torch.where(self.need_init.unsqueeze(1), fold, self.best_fold)
         self.foot_touched &= ~self.need_init.unsqueeze(1)
@@ -252,28 +349,17 @@ class StairTracker:
         good_lift = (vertical >= gait.min_vertical) & (tip_radius >= knee_radius - gait.inward_tol)
         z_counts = moving & good_lift
 
-        # 옮기는 중 몸통 x는 옮기는 발이 모두 단 높이 위에 있을 때만 인정한다 (들기 전에 전진하면 발이 수직면에 막힌다)
-        feet_up = ((tips[..., 2] >= top.unsqueeze(1)) | ~moving).all(1)
-        body_counts = advancing | (moving_pair & feet_up)
-
         # 보상: 신기록 갱신량 (단위 m)
-        gain_body = (capped_body_x - self.best_body_x).clamp(min=0.0) * body_counts
+        gain_body = (c.capped_body_x - c.start_best_body_x).clamp(min=0.0) * c.body_counts
         gain_z = ((capped_z - self.best_z).clamp(min=0.0) * z_counts).sum(1)
         self.progress = 4.0*gain_body + gain_z
-        self.best_body_x = torch.where(body_counts, torch.maximum(self.best_body_x, capped_body_x), self.best_body_x)
+        self.best_body_x = c.best_body_x
         self.best_z = torch.where(z_counts, torch.maximum(self.best_z, capped_z), self.best_z)
 
         # 보상: 접기 단계에서 앞다리를 평행하게 돌린 비율의 신기록 (두 다리의 합)
-        needs_fold = in_stairs & self.table_fold[phase]
-        fold_counts = needs_fold.unsqueeze(1)
+        fold_counts = c.needs_fold.unsqueeze(1)
         self.fold_gain = ((fold - self.best_fold).clamp(min=0.0) * fold_counts).sum(1)
         self.best_fold = torch.where(fold_counts, torch.maximum(self.best_fold, fold), self.best_fold)
-
-        # 단계 완료 조건
-        advance_done = advancing & (self.best_body_x >= limit_x - gait.advance_tol)
-        over_riser = tips[..., 0] >= (riser + gait.over_margin).unsqueeze(1)
-        on_target = over_riser & (terrain >= top.unsqueeze(1) - 1e-3) & near_ground & (air_time == 0)
-        move_done = moving_pair & (on_target | ~moving).all(1)
 
         # 발마다 단계당 1번: 단 끝에 처음 닿을 때, 단 위에 처음 놓을 때
         tip_z = tips[..., 2]
@@ -290,34 +376,24 @@ class StairTracker:
         self.foot_touched |= first_touch
         self.foot_placed |= first_placed
 
-        # 옮기지 않는 발은 지금까지 올린 단에 있어야 단계를 끝낼 수 있다
-        placed_height = (level.unsqueeze(1) + self.table_placed[phase]) * self.stairs.step_height
-        feet_kept = ((terrain >= placed_height - 1e-3) & near_ground) | moving
-
         # 벌점: 옮기는 동안 제자리에서 떨어진 나머지 발의 수 (전진 중에는 걸어야 하므로 없음)
-        self.standing_feet_off = (~feet_kept).sum(1).float() * moving_pair
+        self.standing_feet_off = (~c.feet_kept).sum(1).float() * moving_pair
 
         # 벌점: 몸통의 후진 속도 (전진 보상은 신기록만 주므로 후진 비용이 따로 없다)
         backward = (-self.asset.data.root_vel_w.torch[:, 0]).clamp(min=0.0)
         self.backward_speed = backward * (backward > gait.backward_speed_tol)
 
-        # 정지: 여섯 발이 꼭대기에 있고 몸통이 멈춤
-        speed = self.asset.data.root_vel_w.torch.norm(dim=1)
-        all_kept = feet_kept.all(1)
-        steady = settling & all_kept & (air_time == 0).all(1) & (speed < gait.speed_tol)
-        # 멈춘 상태가 끊기면 시간을 처음부터 다시 잰다
-        self.steady_time = torch.where(steady, self.steady_time + self.env.step_dt, torch.zeros_like(self.steady_time))
-        settle_done = settling & (self.steady_time >= gait.hold_time)
+        # 정지 점수와 멈춘 시간
+        self.steady_time = c.steady_time
         self.settle_score = torch.exp(-(speed / gait.speed_std) ** 2) * settling * all_kept
 
         # 다음 단계로
-        # 접기 단계는 지금 앞다리가 접혀 있어야 끝난다 (신기록이 아니라 현재 값)
-        # 전진은 접는 단계라 기준이 높고, 뒷발 옮기기는 접힌 상태를 대체로 유지하면 된다
-        fold_required = torch.where(kind == ADVANCE, gait.front_fold_required, gait.front_fold_hold)
-        fold_ok = (fold >= fold_required.unsqueeze(1)).all(1) | ~needs_fold
-        self.just_done = ((advance_done | move_done) & all_kept & fold_ok) | settle_done
+        self.just_done = c.done
         self.move = self.move + self.just_done.long()
         self.need_init |= self.just_done
+
+        if self.estimator is not None:
+            self.estimator.update(measured)
 
         # 새 단계에 막 들어선 안정적인 상태 저장 → 리셋 때 시작 상태로 사용
         save = self.just_done & (self.move < self.done_move) & (speed < gait.save_speed_max)
@@ -338,6 +414,8 @@ class StairTracker:
         self.standing_feet_off[env_ids] = 0.0
         self.backward_speed[env_ids] = 0.0
         self.settle_score[env_ids] = 0.0
+        if self.estimator is not None:
+            self.estimator.reset(env_ids, moves)
 
 
 def get_tracker(env) -> StairTracker:
@@ -555,8 +633,15 @@ def stair_reached_top(env) -> torch.Tensor:
 def stair_phase_obs(env) -> torch.Tensor:
     """지금 단계 one-hot (N, PHASE_OBS_SIZE). 마지막 칸 = 정지."""
     tracker = get_tracker(env)
-    phase, _ = tracker.phase_and_level()
-    return F.one_hot(torch.where(tracker.move >= tracker.settle_move, NUM_PHASES, phase), PHASE_OBS_SIZE).float()
+    return tracker.phase_one_hot(tracker.move)
+
+
+def stair_phase_est_obs(env) -> torch.Tensor:
+    """로봇 센서로 계산한다고 가정한 추정 단계 one-hot (N, PHASE_OBS_SIZE). 오차가 0이면 stair_phase_obs와 같다."""
+    tracker = get_tracker(env)
+    if tracker.estimator is None:
+        raise RuntimeError("stair_phase_est_obs를 쓰는 env 설정에는 phase_error가 있어야 합니다.")
+    return tracker.phase_one_hot(tracker.estimator.delayed_move)
 
 
 def stair_feet_target_obs(env) -> torch.Tensor:

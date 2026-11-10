@@ -13,17 +13,44 @@ teacher와 student를 같은 조건으로 비교한다.
 
     uv run python scripts/eval_stairs.py --task Hexapod-Student-A --checkpoint <teachers.pt> --teacher
     uv run python scripts/eval_stairs.py --task Hexapod-Student-A --checkpoint <student.pt>
+
+추정 단계를 보는 student(Hexapod-Stair-Student-A-Phase)는 단계 계산의 오차를 넣어 잴 수 있다.
+--phase_sweep은 오차별로 차례대로 재서 표로 보고한다. 설정마다 첫 에피소드 전체를 돌리므로 --num_envs 1024 정도를 권한다.
+
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --num_envs 1024
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_pos_bias 2 --phase_delay 40
 """
 
 import argparse
 import contextlib
 import importlib.metadata
+import math
 import sys
 
 import torch
 
 START_NAMES = {0: "0번 (계단 앞)", 1: "1번 (앞발이 수직면 앞)"}
 FAIL_TERMS = ("base_low", "bad_ori", "sim_nan", "sim_blowup")  # 걷기에서 넘어지거나 물리가 터진 종료
+
+# --phase_sweep의 시험 목록. 측정값이 없어 잡은 시작값이다. 값은 PhaseErrorCfg 단위 (m, rad, 확률, 초)
+PHASE_SWEEP = [
+    ("오차 없음", {}),
+    ("위치 편향 1cm", {"pos_bias": 0.01}),
+    ("위치 편향 2cm", {"pos_bias": 0.02}),
+    ("위치 편향 4cm", {"pos_bias": 0.04}),
+    ("위치 노이즈 0.5cm", {"pos_noise": 0.005}),
+    ("위치 노이즈 1cm", {"pos_noise": 0.01}),
+    ("관절 편향 1도", {"joint_bias": math.radians(1.0)}),
+    ("관절 편향 2도", {"joint_bias": math.radians(2.0)}),
+    ("관절 편향 4도", {"joint_bias": math.radians(4.0)}),
+    ("접촉 오판 2%", {"contact_flip": 0.02}),
+    ("접촉 오판 5%", {"contact_flip": 0.05}),
+    ("지연 40ms", {"delay": 0.04}),
+    ("지연 100ms", {"delay": 0.1}),
+    ("전체 (예상 수준)", {
+        "pos_bias": 0.02, "pos_noise": 0.005, "joint_bias": math.radians(2.0), "contact_flip": 0.02, "delay": 0.04,
+    }),
+]
 
 
 def collect_first_episodes(env, policy, obs, tracker, termination_manager, max_steps, on_step=None):
@@ -167,6 +194,59 @@ def format_walk_report(data, mask, totals, steps):
     ])
 
 
+def phase_meter(tracker, mask):
+    """첫 에피소드 동안 추정 단계와 참값을 비교한다. (on_step, step 수 (같음, 앞섬, 뒤처짐))"""
+    counts = torch.zeros(3, device=tracker.move.device)
+
+    def on_step(dones, finished):
+        # 리셋된 env의 상태는 다음 에피소드 값이므로 세지 않는다
+        active = mask & ~finished & ~dones
+        difference = tracker.estimator.delayed_move[active] - tracker.move[active]
+        counts[0] += (difference == 0).sum()
+        counts[1] += (difference > 0).sum()
+        counts[2] += (difference < 0).sum()
+
+    return on_step, counts
+
+
+def phase_shares(counts):
+    """step 수를 (같음, 앞섬, 뒤처짐) 비율로."""
+    return (counts / counts.sum().clamp_min(1.0)).tolist()
+
+
+def run_phase_sweep(env, policy, tracker, is_stair, make_error_cfg):
+    """PHASE_SWEEP의 오차마다 첫 에피소드를 돌려 결과를 한 줄씩 출력한다. 정책과 env는 재사용한다."""
+    base_env = env.unwrapped
+    print("\n===== 단계 추정 오차 시험 =====")
+    print("오차 | 꼭대기 도달 | 추정 단계 일치 / 앞섬 / 뒤처짐 | 평균 단계 | 종료 이유")
+    for name, error in PHASE_SWEEP:
+        # 이전 평가에서 만든 상태는 inference tensor라서 리셋도 inference_mode 안에서 해야 한다
+        with torch.inference_mode():
+            tracker.estimator.configure(make_error_cfg(**error))
+            env.reset()  # 여기서 새 오차의 편향을 뽑는다
+            policy.reset(torch.ones(base_env.num_envs, dtype=torch.bool, device=base_env.device))
+        on_step, counts = phase_meter(tracker, is_stair)
+        data = collect_first_episodes(
+            env,
+            policy,
+            env.get_observations(),
+            tracker,
+            base_env.termination_manager,
+            base_env.max_episode_length + 1,
+            on_step,
+        )
+        stair_data = {k: v[is_stair] if torch.is_tensor(v) else v for k, v in data.items()}
+        everyone = torch.ones_like(stair_data["start"], dtype=torch.bool)
+        result = summarize(stair_data, everyone, tracker.final_advance, tracker.done_move, base_env.step_dt)
+        same, ahead, behind = phase_shares(counts)
+        reasons = ", ".join(f"{k} {v:.1%}" for k, v in result["reasons"].items() if v > 0)
+        print(
+            f"{name} | {result['reached_top']:.1%} (±{result['margin']:.1%}) | "
+            f"{same:.1%} / {ahead:.1%} / {behind:.1%} | {result['mean_move']:.2f} | {reasons}",
+            flush=True,
+        )
+
+
 def main():
     import gymnasium as gym
 
@@ -178,7 +258,7 @@ def main():
     from isaaclab_tasks.utils import resolve_task_config, setup_preset_cli
 
     import RLforHexapod.tasks  # noqa: F401
-    from RLforHexapod.tasks.walk.mdp import stair_env_mask
+    from RLforHexapod.tasks.walk.mdp import PhaseErrorCfg, stair_env_mask
 
     parser = argparse.ArgumentParser(description="저장된 정책의 계단 오르기 평가")
     parser.add_argument("--task", required=True, help="Hexapod-Stair 또는 Hexapod-Stair-Student-*")
@@ -186,11 +266,34 @@ def main():
     parser.add_argument("--teacher", action="store_true", help="student 대신 teacher로 움직여 기준 성능을 잰다")
     parser.add_argument("--num_envs", type=int, default=4096)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--phase_sweep", action="store_true", help="단계 추정 오차별로 차례대로 재서 표로 보고한다")
+    parser.add_argument("--phase_pos_bias", type=float, default=0.0, help="수직면에 대한 위치 편향 [cm]")
+    parser.add_argument("--phase_pos_noise", type=float, default=0.0, help="위치 노이즈 std [cm]")
+    parser.add_argument("--phase_joint_bias", type=float, default=0.0, help="관절각 편향 [도]")
+    parser.add_argument("--phase_contact_flip", type=float, default=0.0, help="접촉 판정이 뒤집힐 확률 [%%]")
+    parser.add_argument("--phase_delay", type=float, default=0.0, help="단계 계산 지연 [ms]")
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
     sys.argv = [sys.argv[0]] + remaining
 
     env_cfg, agent_cfg = resolve_task_config(args.task, "rsl_rl_cfg_entry_point")
+
+    phase_error = PhaseErrorCfg(
+        pos_bias=args.phase_pos_bias / 100.0,
+        pos_noise=args.phase_pos_noise / 100.0,
+        joint_bias=math.radians(args.phase_joint_bias),
+        contact_flip=args.phase_contact_flip / 100.0,
+        delay=args.phase_delay / 1000.0,
+    )
+    wants_phase_error = args.phase_sweep or any(
+        (args.phase_pos_bias, args.phase_pos_noise, args.phase_joint_bias, args.phase_contact_flip, args.phase_delay)
+    )
+    if wants_phase_error and not hasattr(env_cfg, "phase_error"):
+        parser.error(f"{args.task}는 추정 단계를 쓰지 않습니다. Hexapod-Stair-Student-A-Phase를 쓰세요.")
+    if args.phase_sweep and args.teacher:
+        parser.error("--phase_sweep은 student 평가용입니다. teacher는 추정 단계를 보지 않습니다.")
+    if hasattr(env_cfg, "phase_error"):
+        env_cfg.phase_error = phase_error
 
     with launch_simulation(env_cfg, args), contextlib.ExitStack() as cleanup:
         agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
@@ -215,7 +318,15 @@ def main():
         tracker = base_env.stair_tracker
         is_stair = stair_env_mask(base_env)
         is_walk = ~is_stair
+
+        if args.phase_sweep:
+            run_phase_sweep(env, policy, tracker, is_stair, PhaseErrorCfg)
+            return
+
         on_step, walk_totals, walk_steps = walk_meter(base_env, is_walk) if is_walk.any() else (None, None, None)
+        phase_counts = None
+        if tracker.estimator is not None and not is_walk.any():
+            on_step, phase_counts = phase_meter(tracker, is_stair)
         data = collect_first_episodes(
             env,
             policy,
@@ -229,6 +340,9 @@ def main():
         if is_stair.any():
             stair_data = {k: v[is_stair] if torch.is_tensor(v) else v for k, v in data.items()}
             print(format_report(stair_data, tracker.final_advance, tracker.done_move, base_env.step_dt))
+        if phase_counts is not None:
+            same, ahead, behind = phase_shares(phase_counts)
+            print(f"\n단계 추정: 일치 {same:.1%}, 앞섬 {ahead:.1%}, 뒤처짐 {behind:.1%}")
         if is_walk.any():
             print(format_walk_report(data, is_walk, walk_totals, walk_steps))
 

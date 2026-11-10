@@ -385,8 +385,8 @@ class HexapodStairStudentBEnvCfg(HexapodStairStudentAEnvCfg):
 class StudentAPhaseObservationsCfg(StudentAObservationsCfg):
     @configclass
     class StudentCfg(StudentAObservationsCfg.StudentCfg):
-        # 실물에는 없는 입력. 단계를 추정하지 못하는 것이 원인인지 확인한다 (6)
-        phase = ObsTerm(func=mdp.stair_phase_obs)
+        # 실물 센서(Point-LIO, 관절각, 발 접촉)로 계산한다고 가정한 단계 (7). 오차는 phase_error에서 정한다
+        phase = ObsTerm(func=mdp.stair_phase_est_obs)
 
     student: StudentCfg = StudentCfg()
 
@@ -394,6 +394,8 @@ class StudentAPhaseObservationsCfg(StudentAObservationsCfg):
 @configclass
 class HexapodStairStudentAPhaseEnvCfg(HexapodStairStudentAEnvCfg):
     observations: ObservationsCfg = StudentAPhaseObservationsCfg()
+    # 기본값은 오차 없음: student가 참값과 같은 단계를 본다. 오차 평가는 scripts/eval_stairs.py에서 바꾼다
+    phase_error: mdp.PhaseErrorCfg = mdp.PhaseErrorCfg()
 
 
 @configclass
