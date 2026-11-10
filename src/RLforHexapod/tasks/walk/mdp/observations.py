@@ -120,6 +120,28 @@ class stairs_height_map(ManagerTermBase):
         return base[:, 2:3] - stairs_terrain_height(stairs, x, y)
 
 
+def stair_env_mask(env) -> torch.Tensor:
+    """계단 env 표시 (N,). 앞쪽 stair_ratio 비율의 env가 계단, 나머지가 걷기다. stair_ratio가 없는 task는 전부 계단."""
+    if not hasattr(env, "_stair_env_mask"):
+        num_stair = round(getattr(env.cfg, "stair_ratio", 1.0) * env.num_envs)
+        env._stair_env_mask = torch.arange(env.num_envs, device=env.device) < num_stair
+    return env._stair_env_mask
+
+
+def stair_env_flag(env) -> torch.Tensor:
+    """teacher 선택용 표시 (N, 1). 계단 env = 1. student는 보지 않는다."""
+    return stair_env_mask(env).float().unsqueeze(1)
+
+
+def student_command(env, stair_velocity: tuple[float, float, float], stair_height: float) -> torch.Tensor:
+    """student가 보는 속도(3)와 몸통 높이(1) 명령 (N, 4). 계단 teacher는 명령을 따르지 않으므로 계단 env에는 고정값을 보여 준다."""
+    command = torch.cat(
+        [env.command_manager.get_command("base_velocity"), env.command_manager.get_command("base_height")], dim=1
+    )
+    fixed = torch.tensor([*stair_velocity, stair_height], device=env.device)
+    return torch.where(stair_env_mask(env).unsqueeze(1), fixed, command)
+
+
 def feet_contact(env, sensor_cfg: SceneEntityCfg, threshold: float = 1.0) -> torch.Tensor:
     """발 접촉 (N, 발 수). 발끝 스위치처럼 수직 힘만 본다: 수직면에 부딪힌 tibia는 접촉이 아니다."""
     sensor = env.scene.sensors[sensor_cfg.name]

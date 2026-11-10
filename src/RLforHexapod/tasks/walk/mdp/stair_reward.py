@@ -30,7 +30,7 @@ from isaaclab.managers import ManagerTermBase
 from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import quat_apply
 
-from .observations import stairs_terrain_height, tip_offsets
+from .observations import stair_env_mask, stairs_terrain_height, tip_offsets
 
 # ===== 다리 =====
 # 라이다 쪽이 앞(+x)이다 (scripts/postprocess_urdf.py에서 몸통을 180° 돌림)
@@ -442,13 +442,34 @@ def reset_stair_state(env, env_ids, x_ranges, buffer_ratio: float = 0.5):
         asset.write_joint_velocity_to_sim_index(velocity=s[:, 13 + J:], env_ids=ids)
 
 
+def reset_mixed_state(env, env_ids, x_ranges, walk_start_x: float, buffer_ratio: float = 0.0):
+    """걷기·계단 통합 student의 리셋. 계단 env는 계단 앞에서, 걷기 env는 계단에서 멀리 떨어진 평지에서 시작한다."""
+    if isinstance(env_ids, slice):
+        env_ids = torch.arange(env.num_envs, device=env.device)
+
+    is_stair = stair_env_mask(env)[env_ids]
+    stair_ids, walk_ids = env_ids[is_stair], env_ids[~is_stair]
+    if len(stair_ids):
+        reset_stair_state(env, stair_ids, x_ranges, buffer_ratio)
+    if len(walk_ids):
+        get_tracker(env).reset(walk_ids, torch.zeros_like(walk_ids))
+        asset = env.scene["robot"]
+        pose = asset.data.default_root_pose.torch[walk_ids].clone()
+        pose[:, :3] += env.scene.env_origins[walk_ids]
+        pose[:, 0] += walk_start_x
+        asset.write_root_pose_to_sim_index(root_pose=pose, env_ids=walk_ids)
+
+
 # ===== 보상 =====
 class stair_phase_bonus(ManagerTermBase):
     """단계를 마칠 때마다 1번 (weight = 단계 하나의 점수). 끝난 에피소드의 진행도도 로그로 남긴다."""
 
     def reset(self, env_ids=None):
         tracker = get_tracker(self._env)
-        ended = tracker.ended_move[slice(None) if env_ids is None else env_ids]
+        ids = slice(None) if env_ids is None else env_ids
+        ended = tracker.ended_move[ids][stair_env_mask(self._env)[ids]]  # 걷기 env는 집계하지 않는다
+        if ended.numel() == 0:
+            return
         log = self._env.extras["log"]
         log["Metrics/stair_move"] = ended.float().mean()
         log["Metrics/stair_level"] = (ended // NUM_PHASES).float().mean()
