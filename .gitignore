@@ -19,4 +19,4 @@ logs
 cad/onshape_export/*
 !cad/onshape_export/config.json
 
-!logs/teacher.py
+!logs/teachers.pt
