@@ -17,8 +17,13 @@ class PhaseErrorCfg:
     """randomize=False(평가): 편향은 정확히 이 크기이고 부호만 무작위다. 값이 곧 "이만큼 틀렸을 때"를 뜻한다.
     randomize=True(학습): 이 값은 최댓값이다. 에피소드마다 env별로 0부터 이 값 사이에서 고르게 뽑는다."""
 
-    pos_bias: float = 0.0      # 수직면에 대한 몸통 위치 편향 [m]. x와 z에 에피소드마다 고정
-    pos_noise: float = 0.0     # 몸통 위치 노이즈 std [m]. x와 z에 step마다
+    # x: 라이다(Point-LIO + 지도에서 찾은 수직면)로 잰 수직면 기준 몸통·발끝 앞뒤 위치
+    pos_bias: float = 0.0      # x 편향 [m]. 에피소드마다 고정
+    pos_noise: float = 0.0     # x 노이즈 std [m]. step마다
+    # z: 발끝 높이는 라이다 z가 아니라 IMU + 관절각 + 지지 발의 디딤면 기준으로 계산한다 (몸통 z 오차가 상쇄된다)
+    # 남는 오차: 실제 단 높이와 가정(16cm)의 차이, IMU 기울기, 기준 발이 모서리에 걸침. 관절각 오차는 joint_bias가 따로 맡는다
+    height_bias: float = 0.0   # 발끝 높이 편향 [m]. 에피소드마다 고정, 모든 발 공통
+    height_noise: float = 0.0  # 발끝 높이 노이즈 std [m]. step마다, 모든 발 공통
     joint_bias: float = 0.0    # 관절각 편향 [rad]. 관절마다 에피소드 동안 고정. 발끝 계산과 앞다리 접힘에 반영
     contact_flip: float = 0.0  # 발 접촉 판정이 뒤집힐 확률. 발마다 step마다
     delay: float = 0.0         # 단계 계산 지연 [s]
@@ -56,7 +61,7 @@ class PhaseEstimator:
         # env별 오차. 리셋 때 뽑는다
         self.pos_bias = torch.zeros(n, 2, device=device)                     # (x, z) [m]
         self.joint_bias = torch.zeros(n, len(foot_names), 3, device=device)  # (coxa, femur, tibia) [rad]
-        self.pos_noise = torch.zeros(n, device=device)                       # std [m]
+        self.pos_noise = torch.zeros(n, 2, device=device)                    # (x, z) std [m]
         self.contact_flip = torch.zeros(n, device=device)                    # 확률
         self.delay_steps = torch.zeros(n, dtype=torch.long, device=device)
         self.configure(cfg)
@@ -95,9 +100,11 @@ class PhaseEstimator:
         self.since_contact[env_ids] = 0.0
         self.history[env_ids] = moves.unsqueeze(1).repeat(1, self.history.shape[1])
 
-        self.pos_bias[env_ids] = self._signed((count, 2), cfg.pos_bias)
+        self.pos_bias[env_ids, 0] = self._signed((count,), cfg.pos_bias)
+        self.pos_bias[env_ids, 1] = self._signed((count,), cfg.height_bias)
         self.joint_bias[env_ids] = self._signed((count, *self.joint_bias.shape[1:]), cfg.joint_bias)
-        self.pos_noise[env_ids] = self._scale(count, cfg.pos_noise)
+        self.pos_noise[env_ids, 0] = self._scale(count, cfg.pos_noise)
+        self.pos_noise[env_ids, 1] = self._scale(count, cfg.height_noise)
         self.contact_flip[env_ids] = self._scale(count, cfg.contact_flip)
         if cfg.randomize:
             self.delay_steps[env_ids] = torch.randint(self.max_delay_steps + 1, (count,), device=self.device)
@@ -118,7 +125,7 @@ class PhaseEstimator:
     def update(self, truth):
         """참값 측정에 오차를 더해 단계를 진행시킨다. truth: stair_reward.PhaseMeasurement."""
         cfg = self.cfg
-        pos_error = self.pos_bias + torch.randn(self.n, 2, device=self.device) * self.pos_noise.unsqueeze(1)
+        pos_error = self.pos_bias + torch.randn(self.n, 2, device=self.device) * self.pos_noise
         error_x, error_z = pos_error.unbind(dim=1)
 
         tips = truth.tips

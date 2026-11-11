@@ -400,17 +400,19 @@ class HexapodStairStudentAPhaseEnvCfg(HexapodStairStudentAEnvCfg):
 
 @configclass
 class HexapodStairStudentAPhaseNoiseEnvCfg(HexapodStairStudentAPhaseEnvCfg):
-    # 실물 판정(접촉 센서)으로 계산한 단계에 오차를 넣어 증류한다. 관측은 A-Phase와 같아 그 체크포인트에서 이어 학습할 수 있다
+    # teacher와 같은 높이 판정으로 계산한 단계에 오차를 넣어 증류한다. 관측은 A-Phase와 같아 그 체크포인트에서 이어 학습할 수 있다
+    # 접촉 판정은 오차 0에서도 teacher보다 앞서서 쓰지 않는다 (일치 84%). 높이는 지지 발 기준으로 계산해 z 오차를 줄인다
     # 실측값이 없어 오차 시험(--phase_sweep)에서 성공률이 꺾이는 지점으로 잡은 최댓값. 에피소드마다 0 ~ 최댓값에서 뽑는다
-    # 위치 편향 2cm 이상은 단계가 멈추는 구간이라 증류로 고치지 않는다
     phase_error: mdp.PhaseErrorCfg = mdp.PhaseErrorCfg(
         pos_bias=0.015,
         pos_noise=0.01,
+        height_bias=0.01,
+        height_noise=0.005,
         joint_bias=math.radians(3.0),
         contact_flip=0.05,
         delay=0.1,
         randomize=True,
-        by_contact=True,
+        by_contact=False,
     )
 
 

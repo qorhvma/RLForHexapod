@@ -20,7 +20,8 @@ teacher와 student를 같은 조건으로 비교한다.
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --num_envs 1024
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_pos_bias 2 --phase_delay 40
 
-판정 방식은 task 설정을 따른다 (A-Phase = 높이 판정, A-PhaseNoise = 접촉 판정). --phase_judge로 바꿀 수 있다.
+위치 오차는 x(라이다, 수직면 기준)와 높이(지지 발 기준 발끝 높이)로 나눠 넣는다.
+판정 방식은 task 설정을 따른다 (A-Phase, A-PhaseNoise 모두 높이 판정). --phase_judge로 바꿀 수 있다.
 평가에서는 오차 크기를 항상 지정한 값 그대로 쓴다 (학습용 무작위 크기는 쓰지 않는다).
 
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --phase_judge contact
@@ -40,11 +41,15 @@ FAIL_TERMS = ("base_low", "bad_ori", "sim_nan", "sim_blowup")  # 걷기에서 �
 # --phase_sweep의 시험 목록. 측정값이 없어 잡은 시작값이다. 값은 PhaseErrorCfg 단위 (m, rad, 확률, 초)
 PHASE_SWEEP = [
     ("오차 없음", {}),
-    ("위치 편향 1cm", {"pos_bias": 0.01}),
-    ("위치 편향 2cm", {"pos_bias": 0.02}),
-    ("위치 편향 4cm", {"pos_bias": 0.04}),
-    ("위치 노이즈 0.5cm", {"pos_noise": 0.005}),
-    ("위치 노이즈 1cm", {"pos_noise": 0.01}),
+    ("x 편향 1cm", {"pos_bias": 0.01}),
+    ("x 편향 2cm", {"pos_bias": 0.02}),
+    ("x 편향 4cm", {"pos_bias": 0.04}),
+    ("x 노이즈 0.5cm", {"pos_noise": 0.005}),
+    ("x 노이즈 1cm", {"pos_noise": 0.01}),
+    ("높이 편향 0.5cm", {"height_bias": 0.005}),
+    ("높이 편향 1cm", {"height_bias": 0.01}),
+    ("높이 편향 2cm", {"height_bias": 0.02}),
+    ("높이 노이즈 0.5cm", {"height_noise": 0.005}),
     ("관절 편향 1도", {"joint_bias": math.radians(1.0)}),
     ("관절 편향 2도", {"joint_bias": math.radians(2.0)}),
     ("관절 편향 4도", {"joint_bias": math.radians(4.0)}),
@@ -53,7 +58,8 @@ PHASE_SWEEP = [
     ("지연 40ms", {"delay": 0.04}),
     ("지연 100ms", {"delay": 0.1}),
     ("전체 (예상 수준)", {
-        "pos_bias": 0.02, "pos_noise": 0.005, "joint_bias": math.radians(2.0), "contact_flip": 0.02, "delay": 0.04,
+        "pos_bias": 0.02, "pos_noise": 0.005, "height_bias": 0.01, "height_noise": 0.003,
+        "joint_bias": math.radians(2.0), "contact_flip": 0.02, "delay": 0.04,
     }),
 ]
 
@@ -272,8 +278,10 @@ def main():
     parser.add_argument("--num_envs", type=int, default=4096)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--phase_sweep", action="store_true", help="단계 추정 오차별로 차례대로 재서 표로 보고한다")
-    parser.add_argument("--phase_pos_bias", type=float, default=0.0, help="수직면에 대한 위치 편향 [cm]")
-    parser.add_argument("--phase_pos_noise", type=float, default=0.0, help="위치 노이즈 std [cm]")
+    parser.add_argument("--phase_pos_bias", type=float, default=0.0, help="수직면에 대한 x 위치 편향 [cm]")
+    parser.add_argument("--phase_pos_noise", type=float, default=0.0, help="x 위치 노이즈 std [cm]")
+    parser.add_argument("--phase_height_bias", type=float, default=0.0, help="발끝 높이 편향 [cm]")
+    parser.add_argument("--phase_height_noise", type=float, default=0.0, help="발끝 높이 노이즈 std [cm]")
     parser.add_argument("--phase_joint_bias", type=float, default=0.0, help="관절각 편향 [도]")
     parser.add_argument("--phase_contact_flip", type=float, default=0.0, help="접촉 판정이 뒤집힐 확률 [%%]")
     parser.add_argument("--phase_delay", type=float, default=0.0, help="단계 계산 지연 [ms]")
@@ -292,7 +300,8 @@ def main():
     env_cfg, agent_cfg = resolve_task_config(args.task, "rsl_rl_cfg_entry_point")
 
     wants_phase_error = args.phase_sweep or args.phase_judge is not None or args.phase_contact_hold is not None or any(
-        (args.phase_pos_bias, args.phase_pos_noise, args.phase_joint_bias, args.phase_contact_flip, args.phase_delay)
+        (args.phase_pos_bias, args.phase_pos_noise, args.phase_height_bias, args.phase_height_noise,
+         args.phase_joint_bias, args.phase_contact_flip, args.phase_delay)
     )
     if wants_phase_error and not hasattr(env_cfg, "phase_error"):
         parser.error(f"{args.task}는 추정 단계를 쓰지 않습니다. Hexapod-Stair-Student-A-Phase를 쓰세요.")
@@ -309,6 +318,8 @@ def main():
         env_cfg.phase_error = PhaseErrorCfg(
             pos_bias=args.phase_pos_bias / 100.0,
             pos_noise=args.phase_pos_noise / 100.0,
+            height_bias=args.phase_height_bias / 100.0,
+            height_noise=args.phase_height_noise / 100.0,
             joint_bias=math.radians(args.phase_joint_bias),
             contact_flip=args.phase_contact_flip / 100.0,
             delay=args.phase_delay / 1000.0,
