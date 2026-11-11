@@ -23,8 +23,7 @@ class PhaseErrorCfg:
     contact_flip: float = 0.0  # 발 접촉 판정이 뒤집힐 확률. 발마다 step마다
     delay: float = 0.0         # 단계 계산 지연 [s]
     randomize: bool = False
-    # 판정 방식. True면 딛고 있음에 발끝 스위치(바닥 방향 힘)를 더하고, 발 밑 단을 발끝 높이로 판정한다
-    # (StairTracker.check_phase 참고)
+    # 판정 방식. True면 딛고 있음에 발끝 스위치(바닥 방향 힘)를 더한다 (StairTracker.check_phase 참고)
     by_contact: bool = False
     # by_contact에서 접촉이 이 시간 안에 있었으면 딛고 있다고 본다 [s]. 0 = 지금 접촉만
     # 0.1초로 두면 막 들어 올린 발도 딛고 있다고 봐서 단계가 teacher보다 앞섰다 (오차 0에서 일치 66%, 0이면 100%)
