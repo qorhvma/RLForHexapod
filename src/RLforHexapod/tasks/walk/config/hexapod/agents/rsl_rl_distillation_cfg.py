@@ -57,6 +57,13 @@ class HexapodStudentAPhaseRunnerCfg(HexapodStudentRunnerCfg):
 
 
 @configclass
+class HexapodStudentAPhaseNoiseRunnerCfg(HexapodStudentRunnerCfg):
+    run_name = "A_phase_noise"
+    # A-Phase 체크포인트에서 이어 학습하는 미세조정용. 이어 학습하면 이 값만큼 더 돈다
+    max_iterations = 500
+
+
+@configclass
 class HexapodStudentATopEndRunnerCfg(HexapodStudentRunnerCfg):
     run_name = "A_top_end"
 

@@ -19,6 +19,11 @@ teacher와 student를 같은 조건으로 비교한다.
 
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --num_envs 1024
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_pos_bias 2 --phase_delay 40
+
+판정 방식은 task 설정을 따른다 (A-Phase = 높이 판정, A-PhaseNoise = 접촉 판정). --phase_judge로 바꿀 수 있다.
+평가에서는 오차 크기를 항상 지정한 값 그대로 쓴다 (학습용 무작위 크기는 쓰지 않는다).
+
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --phase_judge contact
 """
 
 import argparse
@@ -272,28 +277,41 @@ def main():
     parser.add_argument("--phase_joint_bias", type=float, default=0.0, help="관절각 편향 [도]")
     parser.add_argument("--phase_contact_flip", type=float, default=0.0, help="접촉 판정이 뒤집힐 확률 [%%]")
     parser.add_argument("--phase_delay", type=float, default=0.0, help="단계 계산 지연 [ms]")
+    parser.add_argument(
+        "--phase_judge", choices=("height", "contact"), default=None,
+        help="딛고 있음 판정: height = 발 높이 (참값 tracker와 같음), contact = 접촉 센서. 기본은 task 설정",
+    )
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
     sys.argv = [sys.argv[0]] + remaining
 
     env_cfg, agent_cfg = resolve_task_config(args.task, "rsl_rl_cfg_entry_point")
 
-    phase_error = PhaseErrorCfg(
-        pos_bias=args.phase_pos_bias / 100.0,
-        pos_noise=args.phase_pos_noise / 100.0,
-        joint_bias=math.radians(args.phase_joint_bias),
-        contact_flip=args.phase_contact_flip / 100.0,
-        delay=args.phase_delay / 1000.0,
-    )
-    wants_phase_error = args.phase_sweep or any(
+    wants_phase_error = args.phase_sweep or args.phase_judge is not None or any(
         (args.phase_pos_bias, args.phase_pos_noise, args.phase_joint_bias, args.phase_contact_flip, args.phase_delay)
     )
     if wants_phase_error and not hasattr(env_cfg, "phase_error"):
         parser.error(f"{args.task}는 추정 단계를 쓰지 않습니다. Hexapod-Stair-Student-A-Phase를 쓰세요.")
     if args.phase_sweep and args.teacher:
         parser.error("--phase_sweep은 student 평가용입니다. teacher는 추정 단계를 보지 않습니다.")
+
+    # 평가는 오차를 지정한 크기 그대로 쓴다. 판정 방식과 접촉 유지 시간은 task 설정을 따른다
+    phase_settings = {}
     if hasattr(env_cfg, "phase_error"):
-        env_cfg.phase_error = phase_error
+        task_error = env_cfg.phase_error
+        by_contact = task_error.by_contact if args.phase_judge is None else args.phase_judge == "contact"
+        phase_settings = {"by_contact": by_contact, "contact_hold": task_error.contact_hold}
+        env_cfg.phase_error = PhaseErrorCfg(
+            pos_bias=args.phase_pos_bias / 100.0,
+            pos_noise=args.phase_pos_noise / 100.0,
+            joint_bias=math.radians(args.phase_joint_bias),
+            contact_flip=args.phase_contact_flip / 100.0,
+            delay=args.phase_delay / 1000.0,
+            **phase_settings,
+        )
+
+    def make_error_cfg(**error):
+        return PhaseErrorCfg(**error, **phase_settings)
 
     with launch_simulation(env_cfg, args), contextlib.ExitStack() as cleanup:
         agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
@@ -320,7 +338,9 @@ def main():
         is_walk = ~is_stair
 
         if args.phase_sweep:
-            run_phase_sweep(env, policy, tracker, is_stair, PhaseErrorCfg)
+            judge = "접촉" if phase_settings["by_contact"] else "높이"
+            print(f"[INFO] 딛고 있음 판정: {judge}")
+            run_phase_sweep(env, policy, tracker, is_stair, make_error_cfg)
             return
 
         on_step, walk_totals, walk_steps = walk_meter(base_env, is_walk) if is_walk.any() else (None, None, None)

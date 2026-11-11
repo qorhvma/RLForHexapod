@@ -114,6 +114,7 @@ class PhaseMeasurement(NamedTuple):
     in_contact: torch.Tensor  # 발 접촉 (N, 6)
     front_coxa: torch.Tensor  # 앞다리 coxa 각도 [rad] (N, 2)
     speed: torch.Tensor       # 몸통 속도 크기 (N,)
+    recent_contact: torch.Tensor | None = None  # 최근 contact_hold 안에 접촉한 발 (N, 6). 접촉 판정에서만 쓴다
 
 
 class PhaseCheck(NamedTuple):
@@ -245,9 +246,14 @@ class StairTracker:
         return pose[:, :3] - self.env.scene.env_origins, quat_apply(pose[:, 3:7], forward)[:, 1]
 
     # ----- 단계 판정 -----
-    def check_phase(self, move, best_body_x, need_init, steady_time, m: PhaseMeasurement) -> PhaseCheck:
+    def check_phase(
+        self, move, best_body_x, need_init, steady_time, m: PhaseMeasurement, by_contact: bool = False
+    ) -> PhaseCheck:
         """측정값으로 이번 step에 단계가 끝나는지 판정한다. 상태를 바꾸지 않는다.
-        StairTracker(참값)와 PhaseEstimator(오차 있는 값)가 같은 조건을 쓰도록 여기에 모았다."""
+        StairTracker(참값)와 PhaseEstimator(오차 있는 값)가 같은 조건을 쓰도록 여기에 모았다.
+
+        by_contact: 발이 딛고 있는지를 발 높이 대신 접촉 센서로, 발 밑 단을 발끝 x 대신 발끝 높이로 판정한다.
+        단 사이가 단 높이만큼 떨어져 있어 높이 오차에 강하다. 참값 tracker와 teacher 보상은 쓰지 않는다."""
         gait = self.gait
         phase, level = self.phase_and_level(move)
         riser, top = self.riser_and_top(level)
@@ -259,8 +265,15 @@ class StairTracker:
         settling = move == self.settle_move
 
         tips = m.tips
-        terrain = stairs_terrain_height(self.stairs, tips[..., 0], tips[..., 1])
-        near_ground = (tips[..., 2] - terrain - gait.tip_height).abs() < gait.contact_tol
+        if by_contact:
+            # 발 밑 단 = 발끝 높이에서 가장 가까운 단, 딛고 있음 = 최근 contact_hold 안에 접촉
+            step_height = self.stairs.step_height
+            foot_level = torch.round((tips[..., 2] - gait.tip_height) / step_height).clamp(0, self.stairs.num_steps)
+            terrain = foot_level * step_height
+            near_ground = m.recent_contact
+        else:
+            terrain = stairs_terrain_height(self.stairs, tips[..., 0], tips[..., 1])
+            near_ground = (tips[..., 2] - terrain - gait.tip_height).abs() < gait.contact_tol
 
         # 몸통 x: 보상 상한으로 자른 값의 신기록. 새 단계의 첫 step은 지금 값에서 시작
         limit_x = riser + self.table_body_x[phase]

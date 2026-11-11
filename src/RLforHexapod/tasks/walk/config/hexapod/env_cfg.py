@@ -399,6 +399,22 @@ class HexapodStairStudentAPhaseEnvCfg(HexapodStairStudentAEnvCfg):
 
 
 @configclass
+class HexapodStairStudentAPhaseNoiseEnvCfg(HexapodStairStudentAPhaseEnvCfg):
+    # 실물 판정(접촉 센서)으로 계산한 단계에 오차를 넣어 증류한다. 관측은 A-Phase와 같아 그 체크포인트에서 이어 학습할 수 있다
+    # 실측값이 없어 오차 시험(--phase_sweep)에서 성공률이 꺾이는 지점으로 잡은 최댓값. 에피소드마다 0 ~ 최댓값에서 뽑는다
+    # 위치 편향 2cm 이상은 단계가 멈추는 구간이라 증류로 고치지 않는다
+    phase_error: mdp.PhaseErrorCfg = mdp.PhaseErrorCfg(
+        pos_bias=0.015,
+        pos_noise=0.01,
+        joint_bias=math.radians(3.0),
+        contact_flip=0.05,
+        delay=0.1,
+        randomize=True,
+        by_contact=True,
+    )
+
+
+@configclass
 class StudentTopEndTerminationsCfg(StairsTerminationsCfg):
     # 꼭대기에 서 있는 동안의 데이터가 학습을 방해하는지 확인한다
     reached_top = DoneTerm(func=mdp.stair_reached_top, time_out=True)
