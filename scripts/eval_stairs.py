@@ -281,13 +281,17 @@ def main():
         "--phase_judge", choices=("height", "contact"), default=None,
         help="딛고 있음 판정: height = 발 높이 (참값 tracker와 같음), contact = 접촉 센서. 기본은 task 설정",
     )
+    parser.add_argument(
+        "--phase_contact_hold", type=float, default=None,
+        help="contact 판정에서 접촉이 이 시간 안에 있었으면 딛고 있다고 본다 [ms]. 0 = 지금 접촉만. 기본은 task 설정",
+    )
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
     sys.argv = [sys.argv[0]] + remaining
 
     env_cfg, agent_cfg = resolve_task_config(args.task, "rsl_rl_cfg_entry_point")
 
-    wants_phase_error = args.phase_sweep or args.phase_judge is not None or any(
+    wants_phase_error = args.phase_sweep or args.phase_judge is not None or args.phase_contact_hold is not None or any(
         (args.phase_pos_bias, args.phase_pos_noise, args.phase_joint_bias, args.phase_contact_flip, args.phase_delay)
     )
     if wants_phase_error and not hasattr(env_cfg, "phase_error"):
@@ -300,7 +304,8 @@ def main():
     if hasattr(env_cfg, "phase_error"):
         task_error = env_cfg.phase_error
         by_contact = task_error.by_contact if args.phase_judge is None else args.phase_judge == "contact"
-        phase_settings = {"by_contact": by_contact, "contact_hold": task_error.contact_hold}
+        hold = task_error.contact_hold if args.phase_contact_hold is None else args.phase_contact_hold / 1000.0
+        phase_settings = {"by_contact": by_contact, "contact_hold": hold}
         env_cfg.phase_error = PhaseErrorCfg(
             pos_bias=args.phase_pos_bias / 100.0,
             pos_noise=args.phase_pos_noise / 100.0,
@@ -336,10 +341,12 @@ def main():
         tracker = base_env.stair_tracker
         is_stair = stair_env_mask(base_env)
         is_walk = ~is_stair
+        if phase_settings:
+            judge = "접촉" if phase_settings["by_contact"] else "높이"
+            hold_ms = phase_settings["contact_hold"] * 1000.0
+            print(f"[INFO] 딛고 있음 판정: {judge}" + (f", 접촉 유지 {hold_ms:.0f}ms" if phase_settings["by_contact"] else ""))
 
         if args.phase_sweep:
-            judge = "접촉" if phase_settings["by_contact"] else "높이"
-            print(f"[INFO] 딛고 있음 판정: {judge}")
             run_phase_sweep(env, policy, tracker, is_stair, make_error_cfg)
             return
 
