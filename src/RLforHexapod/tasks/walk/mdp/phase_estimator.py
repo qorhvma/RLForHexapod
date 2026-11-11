@@ -25,7 +25,9 @@ class PhaseErrorCfg:
     randomize: bool = False
     # 판정 방식. True면 딛고 있음을 접촉 센서로, 발 밑 단을 발끝 높이로 판정한다 (StairTracker.check_phase 참고)
     by_contact: bool = False
-    contact_hold: float = 0.1  # by_contact에서 접촉이 이 시간 안에 있었으면 딛고 있다고 본다 [s]
+    # by_contact에서 접촉이 이 시간 안에 있었으면 딛고 있다고 본다 [s]. 0 = 지금 접촉만
+    # 0.1초로 두면 막 들어 올린 발도 딛고 있다고 봐서 단계가 teacher보다 앞섰다 (오차 0에서 일치 66%, 0이면 100%)
+    contact_hold: float = 0.0
 
 
 class PhaseEstimator:
