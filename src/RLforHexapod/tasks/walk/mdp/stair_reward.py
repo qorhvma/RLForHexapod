@@ -252,7 +252,7 @@ class StairTracker:
         """측정값으로 이번 step에 단계가 끝나는지 판정한다. 상태를 바꾸지 않는다.
         StairTracker(참값)와 PhaseEstimator(오차 있는 값)가 같은 조건을 쓰도록 여기에 모았다.
 
-        by_contact: 발이 딛고 있는지를 발 높이 대신 접촉 센서로, 발 밑 단을 발끝 x 대신 발끝 높이로 판정한다.
+        by_contact: 발 밑 단을 발끝 x 대신 발끝 높이로 판정하고, 딛고 있음에 접촉 센서를 더한다.
         단 사이가 단 높이만큼 떨어져 있어 높이 오차에 강하다. 참값 tracker와 teacher 보상은 쓰지 않는다."""
         gait = self.gait
         phase, level = self.phase_and_level(move)
@@ -266,11 +266,15 @@ class StairTracker:
 
         tips = m.tips
         if by_contact:
-            # 발 밑 단 = 발끝 높이에서 가장 가까운 단, 딛고 있음 = 최근 contact_hold 안에 접촉
+            # 발 밑 단 = 발끝 높이에서 가장 가까운 단
+            # 딛고 있음 = 최근 contact_hold 안에 접촉 또는 그 단에서 contact_tol 이내
+            # 높이 조건은 참값 tracker처럼 낮게 떠 있는 발(걷는 중, 힘이 안 실린 발)을 통과시키고,
+            # 접촉 조건은 높이 오차로 높이 조건이 실패할 때 받쳐 준다
             step_height = self.stairs.step_height
             foot_level = torch.round((tips[..., 2] - gait.tip_height) / step_height).clamp(0, self.stairs.num_steps)
             terrain = foot_level * step_height
-            near_ground = m.recent_contact
+            near_level = (tips[..., 2] - terrain - gait.tip_height).abs() < gait.contact_tol
+            near_ground = m.recent_contact | near_level
         else:
             terrain = stairs_terrain_height(self.stairs, tips[..., 0], tips[..., 1])
             near_ground = (tips[..., 2] - terrain - gait.tip_height).abs() < gait.contact_tol
