@@ -23,7 +23,8 @@ class PhaseErrorCfg:
     contact_flip: float = 0.0  # 발 접촉 판정이 뒤집힐 확률. 발마다 step마다
     delay: float = 0.0         # 단계 계산 지연 [s]
     randomize: bool = False
-    # 판정 방식. True면 딛고 있음을 접촉 센서로, 발 밑 단을 발끝 높이로 판정한다 (StairTracker.check_phase 참고)
+    # 판정 방식. True면 딛고 있음에 발끝 스위치(바닥 방향 힘)를 더하고, 발 밑 단을 발끝 높이로 판정한다
+    # (StairTracker.check_phase 참고)
     by_contact: bool = False
     # by_contact에서 접촉이 이 시간 안에 있었으면 딛고 있다고 본다 [s]. 0 = 지금 접촉만
     # 0.1초로 두면 막 들어 올린 발도 딛고 있다고 봐서 단계가 teacher보다 앞섰다 (오차 0에서 일치 66%, 0이면 100%)
@@ -126,8 +127,10 @@ class PhaseEstimator:
             tips = tips + self._tip_error_from_joints(tips)
         tips = torch.stack([tips[..., 0] + error_x.unsqueeze(1), tips[..., 1], tips[..., 2] + error_z.unsqueeze(1)], dim=-1)
 
-        flips = torch.rand(truth.in_contact.shape, device=self.device) < self.contact_flip.unsqueeze(1)
-        contact = truth.in_contact ^ flips
+        # 접촉 판정은 실물처럼 발끝 스위치(바닥 방향 힘)만 쓴다. 높이 판정은 참값 tracker와 같은 접촉을 쓴다
+        sensed = truth.sole_contact if cfg.by_contact else truth.in_contact
+        flips = torch.rand(sensed.shape, device=self.device) < self.contact_flip.unsqueeze(1)
+        contact = sensed ^ flips
         self.since_contact = torch.where(contact, torch.zeros_like(self.since_contact), self.since_contact + self.env.step_dt)
         measured = truth._replace(
             body_x=truth.body_x + error_x,

@@ -40,6 +40,9 @@ FOOT_BODIES = ["tibia_4", "tibia_5", "tibia_6", "tibia", "tibia_2", "tibia_3"]
 FRONT, MIDDLE, REAR = [0, 5], [1, 4], [2, 3]
 FRONT_COXA_JOINTS = ["L4_coxa", "L3_coxa"]  # FRONT와 같은 순서
 
+# 발끝 스위치가 눌렸다고 보는 바닥 방향 힘 [N]. student 관측 feet_contact의 기본 threshold와 같다
+SOLE_CONTACT_FORCE = 1.0
+
 # ===== 단계 =====
 ADVANCE, MOVE = 0, 1  # 전진, 옮기기
 
@@ -115,6 +118,7 @@ class PhaseMeasurement(NamedTuple):
     front_coxa: torch.Tensor  # 앞다리 coxa 각도 [rad] (N, 2)
     speed: torch.Tensor       # 몸통 속도 크기 (N,)
     recent_contact: torch.Tensor | None = None  # 최근 contact_hold 안에 접촉한 발 (N, 6). 접촉 판정에서만 쓴다
+    sole_contact: torch.Tensor | None = None    # 바닥 방향 힘으로 본 접촉 (N, 6). 실물 발끝 스위치에 해당
 
 
 class PhaseCheck(NamedTuple):
@@ -334,12 +338,18 @@ class StairTracker:
         knees, tips = self.knees_and_tips()
         air_time = self.sensor.data.current_air_time.torch[:, self.sensor_ids]
         speed = self.asset.data.root_vel_w.torch.norm(dim=1)
+        sole_contact = None
+        if self.estimator is not None:
+            # 실물 발끝 스위치처럼 바닥 방향 힘만 본다. air_time은 tibia 옆면이 수직면에 닿아도 접촉으로 친다
+            forces_z = self.sensor.data.net_normal_forces_w_history.torch[:, :, self.sensor_ids, 2]
+            sole_contact = forces_z.max(dim=1).values > SOLE_CONTACT_FORCE
         measured = PhaseMeasurement(
             body_x=self.body_state()[0][:, 0],
             tips=tips,
             in_contact=air_time == 0,
             front_coxa=self.asset.data.joint_pos.torch[:, self.front_coxa_ids],
             speed=speed,
+            sole_contact=sole_contact,
         )
         c = self.check_phase(self.move, self.best_body_x, self.need_init, self.steady_time, measured)
         riser, top, moving, moving_pair, settling = c.riser, c.top, c.moving, c.moving_pair, c.settling
