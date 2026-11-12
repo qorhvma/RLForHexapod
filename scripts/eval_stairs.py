@@ -38,6 +38,7 @@ sweep의 각 줄 아래에 뒤처진 시간이 어느 추정 단계에서 생겼
 --phase_net을 주면 A-Phase 계열의 단계 입력을 규칙 추정기 대신 단계 추정 신경망(agents/phase_net.py) 출력으로 바꾼다.
 신경망 예측과 참값의 일치/앞섬/뒤처짐, 단계별 정답률, 0.5초 넘게 계속 틀린 비율을 함께 보고한다.
 sweep에서는 단계 계산에만 쓰는 원인(발끝 높이 계산, 계산 지연)을 건너뛴다.
+규칙 판정을 입력으로 받는 신경망(phase_rule)은 지연만 건너뛰고, 줄마다 입력으로 받은 규칙 추정기의 일치도 보여 준다.
 
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <A_phase.pt> --phase_net <phase_net.pt> --error_sweep --num_envs 1024
 """
@@ -418,15 +419,18 @@ def phase_shares(counts):
     return (counts / counts.sum().clamp_min(1.0)).tolist()
 
 
-def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate, phase_net=False):
+def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate, phase_net=False,
+                    net_uses_rule=False):
     """ERROR_SWEEP의 오차마다 첫 에피소드를 돌려 결과를 한 줄씩 출력한다. 정책과 env는 재사용한다.
     추정 단계를 관측으로 받지 않는 student는 영향이 없는 줄을 건너뛰고, 단계 일치 칸을 비운다.
-    phase_net: policy가 PhaseNetPolicy다. 단계 계산에만 쓰는 원인을 건너뛰고, 일치 칸은 신경망 예측으로 잰다."""
+    phase_net: policy가 PhaseNetPolicy다. 일치 칸은 신경망 예측으로 잰다. 단계 계산에만 쓰는 원인은 건너뛴다.
+    net_uses_rule: 신경망이 규칙 판정(phase_rule)을 입력으로 받는다. 발끝 높이 계산 오차가 영향을 주므로 지연만 건너뛴다."""
     base_env = env.unwrapped
     print("\n===== 센서 오차 시험 =====")
     print("오차 | 꼭대기 도달 | 추정 단계 일치 / 앞섬 / 뒤처짐 | 평균 단계 | 종료 이유")
     for name, error in ERROR_SWEEP:
-        if (not observes_estimate or phase_net) and error and set(error) <= ESTIMATE_ONLY:
+        skipped = {"delay"} if net_uses_rule else ESTIMATE_ONLY
+        if (not observes_estimate or phase_net) and error and set(error) <= skipped:
             continue
         estimator_cfg, sensor_cfg = make_error_cfgs(**error)
         # 이전 평가에서 만든 상태는 inference tensor라서 리셋도 inference_mode 안에서 해야 한다
@@ -436,10 +440,13 @@ def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_es
                 tracker.estimator.configure(estimator_cfg)
             env.reset()  # 여기서 새 오차의 편향을 뽑는다
             policy.reset(torch.ones(base_env.num_envs, dtype=torch.bool, device=base_env.device))
-        driver, net_meter = policy, None
+        driver, net_meter, rule_counts = policy, None, None
         if phase_net:
             net_meter = NetPhaseMeter(policy, tracker, is_stair)
-            driver, on_step = net_meter, net_meter.chain(None)
+            rule_step = None
+            if net_uses_rule:  # 신경망이 입력으로 받는 규칙 추정기의 일치도 함께 잰다 (신경망이 고친 만큼 비교)
+                rule_step, rule_counts, _ = phase_meter(tracker, is_stair)
+            driver, on_step = net_meter, net_meter.chain(rule_step)
             counts, behind_at, names = net_meter.counts, net_meter.behind_at, AUX_PHASE_NAMES
         elif not observes_estimate:
             on_step, counts, behind_at, names = None, torch.zeros(3), torch.zeros(len(PHASE_NAMES)), PHASE_NAMES
@@ -476,6 +483,9 @@ def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_es
             ))
         if net_meter is not None:
             details.append(net_meter.stuck_text(base_env.step_dt))
+            if rule_counts is not None:
+                rule = phase_shares(rule_counts)
+                details.append(f"규칙 추정기 일치 {rule[0]:.1%} / 앞섬 {rule[1]:.1%} / 뒤처짐 {rule[2]:.1%}")
         elif tracker.estimator.cfg.catch_up:
             details.append(f"건너뛰기 {tracker.estimator.catch_ups.item()}회")
         if details:
@@ -551,8 +561,6 @@ def main():
         parser.error(f"{args.task}는 추정 단계를 쓰지 않습니다. --phase_* 판정 옵션은 A-Phase 계열에만 있습니다.")
     if args.phase_net is not None and (not observes_estimate or args.teacher):
         parser.error("--phase_net은 단계 입력을 받는 A-Phase 계열 student에만 쓸 수 있습니다.")
-    if args.phase_net is not None and any(o is not None for o in judge_options):
-        parser.error("--phase_net을 쓰면 규칙 추정기를 쓰지 않으므로 --phase_* 판정 옵션은 의미가 없습니다.")
 
     # 평가는 오차를 지정한 크기 그대로 쓴다 (학습용 무작위 크기는 쓰지 않는다). 판정 방식은 task 설정을 따른다
     estimator_settings = {}
@@ -610,10 +618,13 @@ def main():
 
             net, _ = PhaseNet.load(args.phase_net, base_env.device)
             net.eval()
+            if not net.uses_rule and any(o is not None for o in judge_options):
+                parser.error("이 신경망은 규칙 판정을 입력으로 받지 않으므로 --phase_* 판정 옵션은 의미가 없습니다.")
             policy = PhaseNetPolicy(policy, net, term_slice(base_env.observation_manager), base_env.num_envs,
                                     base_env.device)
-            print(f"[INFO] 단계 입력: 단계 추정 신경망 {args.phase_net} ({net.config['input_mode']})")
-        elif observes_estimate:
+            print(f"[INFO] 단계 입력: 단계 추정 신경망 {args.phase_net} ({net.config['input_mode']}), "
+                  f"추가 입력 {net.extra_groups}")
+        if observes_estimate and (args.phase_net is None or net.uses_rule):
             s = estimator_settings
             judge = "높이 3cm"
             if s["by_contact"]:
@@ -624,7 +635,8 @@ def main():
 
         if args.error_sweep:
             run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate,
-                            phase_net=args.phase_net is not None)
+                            phase_net=args.phase_net is not None,
+                            net_uses_rule=args.phase_net is not None and net.uses_rule)
             return
 
         on_step, walk_totals, walk_steps = walk_meter(base_env, is_walk) if is_walk.any() else (None, None, None)

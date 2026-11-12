@@ -109,8 +109,9 @@ class PhaseEstimator:
         lever = tips.unsqueeze(2) - joint_pos
         return (chain_error.unsqueeze(-1) * torch.cross(axis, lever, dim=-1)).sum(dim=2)
 
-    def measure(self, truth):
-        """참값 측정을 센서 읽기 값으로 바꾼다. truth: stair_reward.PhaseMeasurement."""
+    def read(self, truth):
+        """참값 측정을 센서 읽기 값으로 바꾼다 (몸통 x, 발끝, 접촉, 앞다리 coxa). 상태를 바꾸지 않는다.
+        단계 추정 신경망의 규칙 특징(stair_rule_features)도 이 값을 쓴다. truth: stair_reward.PhaseMeasurement."""
         sensors, tracker = self.sensors, self.tracker
         tips = truth.tips
         front_coxa = truth.front_coxa
@@ -128,16 +129,21 @@ class PhaseEstimator:
         tips = torch.stack([tips_x, tips[..., 1], tips_z], dim=-1)
 
         # 접촉: 참값 tracker와 같은 접촉에 발끝 스위치의 오판을 넣는다 (스위치 값과 같은 오판)
-        flips = sensors.read_flips()
-        contact = truth.in_contact ^ flips
+        contact = truth.in_contact ^ sensors.read_flips()
+        return truth._replace(body_x=truth.body_x + error_x, tips=tips, in_contact=contact, front_coxa=front_coxa)
+
+    def measure(self, truth):
+        """판정에 넣을 측정값 = read() + (by_contact일 때) 스위치로 딛고 있다고 확인된 발."""
+        tracker, cfg = self.tracker, self.cfg
+        measured = self.read(truth)
         contact_ground = None
-        cfg = self.cfg
         if cfg.by_contact:
             # 스위치가 눌리고 발끝 높이가 발 밑 지형(발끝 x로 고른 단)에서 contact_window 안
             gait = tracker.gait
+            tips = measured.tips
             terrain = stairs_terrain_height(tracker.stairs, tips[..., 0], tips[..., 1])
             height_gap = (tips[..., 2] - terrain - gait.tip_height).abs()
-            pressed = (truth.sole_contact ^ flips) & (height_gap < cfg.contact_window)
+            pressed = (truth.sole_contact ^ self.sensors.read_flips()) & (height_gap < cfg.contact_window)
             # 높이 3cm 조건은 실패하고 스위치로만 통과하는 상태가 이어진 시간. 높이로 통과하면 다시 잰다
             # (눌린 시간으로 재면 오래 딛고 있던 발이 잠깐 높게 읽힐 때 바로 통과해서 거르지 못한다)
             switch_only = pressed & (height_gap >= gait.contact_tol)
@@ -145,13 +151,7 @@ class PhaseEstimator:
                 switch_only, self.pressed_time + self.env.step_dt, torch.zeros_like(self.pressed_time)
             )
             contact_ground = switch_only & (self.pressed_time >= cfg.contact_confirm + self.env.step_dt - 1e-6)
-        return truth._replace(
-            body_x=truth.body_x + error_x,
-            tips=tips,
-            in_contact=contact,
-            front_coxa=front_coxa,
-            contact_ground=contact_ground,
-        )
+        return measured._replace(contact_ground=contact_ground)
 
     def update(self, truth):
         """센서 읽기 값으로 단계를 진행시킨다."""

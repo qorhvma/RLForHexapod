@@ -322,6 +322,25 @@ class StairTracker:
             steady_time=new_steady_time, done=done,
         )
 
+    def truth_measurement(self, tips=None) -> PhaseMeasurement:
+        """지금 참값으로 잰 판정 측정값. tips: 이미 계산한 발끝 (없으면 계산)."""
+        if tips is None:
+            tips = self.tips()
+        air_time = self.sensor.data.current_air_time.torch[:, self.sensor_ids]
+        sole_contact = None
+        if self.estimator is not None:
+            # 실물 발끝 스위치처럼 바닥 방향 힘만 본다. air_time은 tibia 옆면이 수직면에 닿아도 접촉으로 친다
+            forces_z = self.sensor.data.net_normal_forces_w_history.torch[:, :, self.sensor_ids, 2]
+            sole_contact = forces_z.max(dim=1).values > SOLE_CONTACT_FORCE
+        return PhaseMeasurement(
+            body_x=self.body_state()[0][:, 0],
+            tips=tips,
+            in_contact=air_time == 0,
+            front_coxa=self.asset.data.joint_pos.torch[:, self.front_coxa_ids],
+            speed=self.asset.data.root_vel_w.torch.norm(dim=1),
+            sole_contact=sole_contact,
+        )
+
     # ----- step마다 한 번 -----
     def update(self):
         counter = self.env.common_step_counter
@@ -332,20 +351,8 @@ class StairTracker:
         gait = self.gait
         knees, tips = self.knees_and_tips()
         air_time = self.sensor.data.current_air_time.torch[:, self.sensor_ids]
-        speed = self.asset.data.root_vel_w.torch.norm(dim=1)
-        sole_contact = None
-        if self.estimator is not None:
-            # 실물 발끝 스위치처럼 바닥 방향 힘만 본다. air_time은 tibia 옆면이 수직면에 닿아도 접촉으로 친다
-            forces_z = self.sensor.data.net_normal_forces_w_history.torch[:, :, self.sensor_ids, 2]
-            sole_contact = forces_z.max(dim=1).values > SOLE_CONTACT_FORCE
-        measured = PhaseMeasurement(
-            body_x=self.body_state()[0][:, 0],
-            tips=tips,
-            in_contact=air_time == 0,
-            front_coxa=self.asset.data.joint_pos.torch[:, self.front_coxa_ids],
-            speed=speed,
-            sole_contact=sole_contact,
-        )
+        measured = self.truth_measurement(tips)
+        speed = measured.speed
         c = self.check_phase(self.move, self.best_body_x, self.need_init, self.steady_time, measured)
         riser, top, moving, moving_pair, settling = c.riser, c.top, c.moving, c.moving_pair, c.settling
         fold, on_target, all_kept = c.fold, c.on_target, c.all_kept
@@ -681,6 +688,47 @@ def stair_phase_est_obs(env) -> torch.Tensor:
     if tracker.estimator is None:
         raise RuntimeError("stair_phase_est_obs를 쓰는 env 설정에는 phase_estimator가 있어야 합니다.")
     return tracker.phase_one_hot(tracker.estimator.delayed_move)
+
+
+# 규칙 특징의 자르는 범위 [m]. 판정 기준 근처만 자세히 보이면 된다
+RULE_X_CLIP = (-0.3, 0.3)
+RULE_Z_CLIP = (-0.1, 0.2)
+
+
+def stair_rule_features(env) -> torch.Tensor:
+    """규칙 추정기(PhaseEstimator)의 판정과 그 판정에 쓰는 값 (N, 40). 단계 추정 신경망만 쓴다.
+    신경망이 단계를 처음부터 배우지 않고, 규칙의 판정을 출발점으로 삼아 굳었을 때만 고치게 하려는 입력이다.
+    값은 모두 센서 읽기 값(PhaseEstimator.read, 센서 오차 포함)이다. 기준 단은 규칙이 추정한 단이다.
+
+        규칙 단계 one-hot (7) + 규칙이 추정한 단 one-hot (단 수 + 1)
+        발마다 (6 × 4): 발 밑 단 - 기준 단, 수직면 + 2cm를 넘은 거리, 발 밑 지면 위 높이, 접촉
+        앞다리 접힘 비율 (2), 몸통 x - 전진 목표, 신기록 - 전진 목표, 멈춘 시간 / 1초
+    """
+    tracker = get_tracker(env)
+    est = tracker.estimator
+    if est is None:
+        raise RuntimeError("stair_rule_features를 쓰는 env 설정에는 phase_estimator가 있어야 합니다.")
+    stairs, gait = tracker.stairs, tracker.gait
+    m = est.read(tracker.truth_measurement())
+    move = est.move
+    phase, level = tracker.phase_and_level(move)
+    riser, _ = tracker.riser_and_top(level)
+    tips = m.tips
+    terrain = stairs_terrain_height(stairs, tips[..., 0], tips[..., 1])
+    foot_level = terrain / stairs.step_height - level.unsqueeze(1).float()
+    past_riser = (tips[..., 0] - (riser + gait.over_margin).unsqueeze(1)).clamp(*RULE_X_CLIP)
+    height = (tips[..., 2] - terrain - gait.tip_height).clamp(*RULE_Z_CLIP)
+    fold = (m.front_coxa / tracker.front_parallel).clamp(max=1.0)
+    limit_x = riser + tracker.table_body_x[phase]
+    body_gap = (m.body_x - limit_x).clamp(*RULE_X_CLIP)
+    best_gap = (est.best_body_x - limit_x).clamp(*RULE_X_CLIP)
+    steady = (est.steady_time / gait.hold_time).clamp(max=1.0)
+    return torch.cat([
+        tracker.phase_one_hot(move),
+        F.one_hot(level, stairs.num_steps + 1).float(),
+        foot_level.round().clamp(-2.0, 2.0), past_riser, height, m.in_contact.float(),
+        fold, body_gap.unsqueeze(1), best_gap.unsqueeze(1), steady.unsqueeze(1),
+    ], dim=1)
 
 
 def stair_feet_target_obs(env) -> torch.Tensor:

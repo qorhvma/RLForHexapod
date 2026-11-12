@@ -13,7 +13,8 @@ A-Phase student(참값 단계로 증류한 체크포인트)가 계단을 오르�
 
 센서 오차 (mdp/sensor_model.py): 학습 중에는 에피소드마다 0 ~ 최댓값에서 뽑는다 (TRAIN_ERRORS × --error_scale).
 신경망이 실물 같은 관측 오차에서도 단계를 맞히게 하기 위해서다. 같은 오차가 A-Phase의 관측에도 들어간다.
-단계 계산에만 쓰는 원인(발끝 높이 계산, 계산 지연)은 신경망과 관계없어 넣지 않는다.
+규칙 특징(phase_rule)을 넣으면 발끝 높이 계산 오차(RULE_ERRORS)도 넣는다. 그 값이 규칙 판정에 들어가기 때문이다.
+계산 지연은 넣지 않는다.
 
 --resume으로 이어 학습할 때는 --dagger_iters 0을 주면 처음부터 신경망 출력으로 움직인다.
 
@@ -27,6 +28,12 @@ A-Phase student(참값 단계로 증류한 체크포인트)가 계단을 오르�
 - 라이다로 잰 몸통 x (mdp.lidar_body_x): 몇 번째 단 위인지. 라이다 x 오차가 높이맵 밀림과 같은 값으로 들어간다
 - 몸통 기준 발끝 높이 (mdp.feet_below_body, IMU + 관절각 FK): 뒷발이 아직 아래 단에 있는지.
   마지막 단의 접기 전진·뒷발은 몸통 x가 꼭대기 정지와 거의 같아서 이것이 주된 구분 정보다
+
+규칙 특징 (phase_rule 관측 그룹, 기본으로 넣음, --no_rule로 뺌, mdp.stair_rule_features):
+규칙 추정기(높이 3cm 판정, 건너뛰기 끔)의 단계와, 그 판정에 쓰는 값(발마다 수직면을 넘은 거리, 지면 위 높이, 접촉,
+앞다리 접힘, 전진 목표까지 거리, 멈춘 시간). 규칙 추정기는 단계 이력을 정확히 기억하고 기준도 정확하지만,
+편향이 있으면 한 단계에서 굳는다. 신경망은 이력을 1.28초(--steps)보다 길게 배우기 어렵고 기준을 데이터로 흉내 내야 한다.
+그래서 규칙 판정을 출발점으로 주고, 판정 값을 보고 규칙이 굳은 경우만 고치게 한다. 오차가 없으면 규칙 단계를 그대로 따르면 된다.
 
 결과는 logs/phase_net/<시각>/model_<iter>.pt. TensorBoard:
 - Phase/accuracy_net: 신경망 출력으로 움직인 env에서의 정답률
@@ -58,6 +65,12 @@ TRAIN_ERRORS = {
     "encoder_noise": math.radians(0.5),
     "contact_flip": 0.05,
 }
+# 규칙 특징을 넣을 때 더하는 오차: 발끝 높이 계산 (규칙 판정에만 들어가는 원인). 오차 시험의 "전체"보다 조금 넉넉하게
+RULE_ERRORS = {
+    "step_height_error": 0.01,
+    "foot_height_bias": 0.01,
+    "foot_height_noise": 0.005,
+}
 STUCK_STEPS = 25  # 0.5초 (step 0.02초)
 WEIGHT_RANGE = (0.1, 10.0)  # 단계별 가중치 하한·상한 (평균 1 기준). 아주 드문 단계가 손실을 독차지하지 않게
 SHARE_DECAY = 0.95  # 단계별 시간 비중의 지수 평균
@@ -84,6 +97,7 @@ def main():
     import RLforHexapod.tasks  # noqa: F401
     from RLforHexapod.tasks.walk.config.hexapod.agents.phase_net import (
         EXTRA_GROUP,
+        RULE_GROUP,
         PhaseNet,
         PhaseNetPolicy,
         net_input,
@@ -110,7 +124,9 @@ def main():
     parser.add_argument("--class_weight_power", type=float, default=0.0,
                         help="단계별 손실 가중치 = (시간 비중)^(-power). 1 = 반비례, 0 = 가중치 없음 (1은 역효과였음)")
     parser.add_argument("--no_extra", action="store_true",
-                        help="phase_net 관측 그룹(몸통 x, 발끝 높이)을 입력에 넣지 않는다 (Student-A 관측만)")
+                        help="phase_net 관측 그룹(몸통 x, 발끝 높이)을 입력에 넣지 않는다")
+    parser.add_argument("--no_rule", action="store_true",
+                        help="phase_rule 관측 그룹(규칙 추정기의 단계와 판정 값)을 입력에 넣지 않는다")
     parser.add_argument("--save_interval", type=int, default=100)
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
@@ -119,9 +135,15 @@ def main():
     env_cfg, agent_cfg = resolve_task_config(args.task, "rsl_rl_cfg_entry_point")
     if not hasattr(env_cfg, "phase_estimator"):
         parser.error(f"{args.task}는 단계 입력을 받지 않습니다. A-Phase 계열 task를 쓰세요.")
-    # 규칙 추정기의 출력은 신경망 출력으로 바꿔 넣으므로 쓰지 않는다
+    # 규칙 추정기: A-Phase의 단계 칸에는 신경망 출력이 들어가고, 규칙 판정은 phase_rule 입력으로만 쓴다.
+    # 평가(eval_stairs.py)의 기본 판정과 같게 높이 3cm, 건너뛰기 끔, 지연 없음
     env_cfg.phase_estimator = PhaseEstimatorCfg()
-    errors = {k: v * args.error_scale for k, v in TRAIN_ERRORS.items()}
+    if args.resume:
+        saved_groups = torch.load(args.resume, map_location="cpu", weights_only=False)["config"].get("extra_groups", [])
+    else:
+        saved_groups = [g for g, off in ((EXTRA_GROUP, args.no_extra), (RULE_GROUP, args.no_rule)) if not off]
+    train_errors = {**TRAIN_ERRORS, **(RULE_ERRORS if RULE_GROUP in saved_groups else {})}
+    errors = {k: v * args.error_scale for k, v in train_errors.items()}
     env_cfg.sensor_error = SensorErrorCfg(**errors, randomize=True)
 
     with launch_simulation(env_cfg, args):
@@ -155,10 +177,10 @@ def main():
             print(f"[INFO] 이어서 학습: {args.resume} (iteration {start_iter}부터)")
             extra_groups = net.extra_groups
         else:
-            extra_groups = [] if args.no_extra else [EXTRA_GROUP]
+            extra_groups = saved_groups
             missing = [g for g in extra_groups if g not in obs.keys()]
             if missing:
-                parser.error(f"{args.task} 관측에 {missing} 그룹이 없습니다. --no_extra를 쓰거나 A-Phase 계열 task를 쓰세요.")
+                parser.error(f"{args.task} 관측에 {missing} 그룹이 없습니다. --no_extra/--no_rule을 쓰거나 A-Phase 계열 task를 쓰세요.")
         input_dim = net_input(obs, cut, extra_groups).shape[1]
         if not args.resume:
             net = PhaseNet(input_dim, args.hidden, num_classes, args.input_mode, extra_groups).to(device)

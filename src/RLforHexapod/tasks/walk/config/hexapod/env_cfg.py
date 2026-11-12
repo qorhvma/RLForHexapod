@@ -402,8 +402,19 @@ class StudentAPhaseObservationsCfg(StudentAObservationsCfg):
             self.concatenate_terms = True
             self.enable_corruption = False
 
+    @configclass
+    class PhaseRuleCfg(ObsGroup):
+        """단계 추정 신경망만 보는 규칙 추정기의 판정과 판정 값 (40). 신경망이 규칙을 출발점으로 고치게 한다."""
+
+        rule = ObsTerm(func=mdp.stair_rule_features)
+
+        def __post_init__(self):
+            self.concatenate_terms = True
+            self.enable_corruption = False
+
     student: StudentCfg = StudentCfg()
     phase_net: PhaseNetCfg = PhaseNetCfg()
+    phase_rule: PhaseRuleCfg = PhaseRuleCfg()
 
 
 @configclass
