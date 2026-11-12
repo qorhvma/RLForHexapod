@@ -21,10 +21,13 @@ teacher와 student를 같은 조건으로 비교한다.
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_pos_bias 2 --phase_delay 40
 
 위치 오차는 x(라이다, 수직면 기준)와 높이(지지 발 기준 발끝 높이)로 나눠 넣는다.
-판정 방식은 task 설정을 따른다 (A-Phase, A-PhaseNoise 모두 높이 판정). --phase_judge로 바꿀 수 있다.
+판정 방식은 task 설정을 따른다 (A-Phase, A-PhaseNoise 모두 높이 3cm, 건너뛰기 끔). 옵션으로 바꿀 수 있다.
+- --phase_judge contact: 높이 3cm 또는 (발끝 스위치 + 높이 --phase_contact_window cm, --phase_contact_confirm ms 유지)
+- --phase_catch_up: 전진 단계에서 다음 옮기기 단계가 이미 끝났으면 건너뛴다
 평가에서는 오차 크기를 항상 지정한 값 그대로 쓴다 (학습용 무작위 크기는 쓰지 않는다).
+sweep의 각 줄 아래에 뒤처진 시간이 어느 추정 단계에서 생겼는지 나온다.
 
-    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --phase_judge contact
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --phase_judge contact --phase_catch_up
 """
 
 import argparse
@@ -205,19 +208,30 @@ def format_walk_report(data, mask, totals, steps):
     ])
 
 
+PHASE_NAMES = ["전진", "앞발", "중간발", "접기 전진", "뒷발1", "뒷발2", "마지막 전진", "정지"]  # PHASES 순서 + 2
+
+
 def phase_meter(tracker, mask):
-    """첫 에피소드 동안 추정 단계와 참값을 비교한다. (on_step, step 수 (같음, 앞섬, 뒤처짐))"""
-    counts = torch.zeros(3, device=tracker.move.device)
+    """첫 에피소드 동안 추정 단계와 참값을 비교한다.
+    (on_step, step 수 (같음, 앞섬, 뒤처짐), 뒤처진 step 수를 추정 단계 종류별로 (len(PHASE_NAMES),))"""
+    device = tracker.move.device
+    counts = torch.zeros(3, device=device)
+    behind_at = torch.zeros(len(PHASE_NAMES), device=device)
+    num_phases = tracker.final_advance // tracker.stairs.num_steps
 
     def on_step(dones, finished):
         # 리셋된 env의 상태는 다음 에피소드 값이므로 세지 않는다
         active = mask & ~finished & ~dones
-        difference = tracker.estimator.delayed_move[active] - tracker.move[active]
+        estimate = tracker.estimator.delayed_move[active]
+        difference = estimate - tracker.move[active]
         counts[0] += (difference == 0).sum()
         counts[1] += (difference > 0).sum()
         counts[2] += (difference < 0).sum()
+        kind = torch.where(estimate < tracker.final_advance, estimate % num_phases, num_phases)
+        kind = torch.where(estimate > tracker.final_advance, num_phases + 1, kind)
+        behind_at.add_(torch.bincount(kind[difference < 0], minlength=len(PHASE_NAMES)).float())
 
-    return on_step, counts
+    return on_step, counts, behind_at
 
 
 def phase_shares(counts):
@@ -236,7 +250,7 @@ def run_phase_sweep(env, policy, tracker, is_stair, make_error_cfg):
             tracker.estimator.configure(make_error_cfg(**error))
             env.reset()  # 여기서 새 오차의 편향을 뽑는다
             policy.reset(torch.ones(base_env.num_envs, dtype=torch.bool, device=base_env.device))
-        on_step, counts = phase_meter(tracker, is_stair)
+        on_step, counts, behind_at = phase_meter(tracker, is_stair)
         data = collect_first_episodes(
             env,
             policy,
@@ -256,6 +270,17 @@ def run_phase_sweep(env, policy, tracker, is_stair, make_error_cfg):
             f"{same:.1%} / {ahead:.1%} / {behind:.1%} | {result['mean_move']:.2f} | {reasons}",
             flush=True,
         )
+        # 뒤처진 시간이 어느 추정 단계에서 생겼는지 (멈춘 위치). 건너뛰기는 그 오차에서 일어난 횟수
+        details = []
+        if behind_at.sum() > 0:
+            shares = (behind_at / behind_at.sum()).tolist()
+            details.append("뒤처진 위치: " + ", ".join(
+                f"{n} {s:.0%}" for n, s in zip(PHASE_NAMES, shares, strict=True) if s >= 0.005
+            ))
+        if tracker.estimator.cfg.catch_up:
+            details.append(f"건너뛰기 {tracker.estimator.catch_ups.item()}회")
+        if details:
+            print("    " + " | ".join(details), flush=True)
 
 
 def main():
@@ -290,8 +315,16 @@ def main():
         help="딛고 있음 판정: height = 발 높이 (참값 tracker와 같음), contact = 접촉 센서. 기본은 task 설정",
     )
     parser.add_argument(
-        "--phase_contact_hold", type=float, default=None,
-        help="contact 판정에서 접촉이 이 시간 안에 있었으면 딛고 있다고 본다 [ms]. 0 = 지금 접촉만. 기본은 task 설정",
+        "--phase_contact_window", type=float, default=None,
+        help="contact 판정에서 스위치로 인정할 발끝 높이 차 [cm]. 기본은 task 설정 (8)",
+    )
+    parser.add_argument(
+        "--phase_contact_confirm", type=float, default=None,
+        help="contact 판정에서 스위치로만 통과하는 상태가 이 시간 이어져야 인정한다 [ms]. 0 = 바로. 기본은 task 설정",
+    )
+    parser.add_argument(
+        "--phase_catch_up", action=argparse.BooleanOptionalAction, default=None,
+        help="전진 단계에서 다음 옮기기 단계가 이미 끝났으면 건너뛴다. 기본은 task 설정",
     )
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
@@ -299,7 +332,8 @@ def main():
 
     env_cfg, agent_cfg = resolve_task_config(args.task, "rsl_rl_cfg_entry_point")
 
-    wants_phase_error = args.phase_sweep or args.phase_judge is not None or args.phase_contact_hold is not None or any(
+    judge_options = (args.phase_judge, args.phase_contact_window, args.phase_contact_confirm, args.phase_catch_up)
+    wants_phase_error = args.phase_sweep or any(o is not None for o in judge_options) or any(
         (args.phase_pos_bias, args.phase_pos_noise, args.phase_height_bias, args.phase_height_noise,
          args.phase_joint_bias, args.phase_contact_flip, args.phase_delay)
     )
@@ -308,13 +342,20 @@ def main():
     if args.phase_sweep and args.teacher:
         parser.error("--phase_sweep은 student 평가용입니다. teacher는 추정 단계를 보지 않습니다.")
 
-    # 평가는 오차를 지정한 크기 그대로 쓴다. 판정 방식과 접촉 유지 시간은 task 설정을 따른다
+    # 평가는 오차를 지정한 크기 그대로 쓴다. 판정 방식(접촉 범위, 확인 시간, 건너뛰기)은 task 설정을 따른다
     phase_settings = {}
     if hasattr(env_cfg, "phase_error"):
         task_error = env_cfg.phase_error
-        by_contact = task_error.by_contact if args.phase_judge is None else args.phase_judge == "contact"
-        hold = task_error.contact_hold if args.phase_contact_hold is None else args.phase_contact_hold / 1000.0
-        phase_settings = {"by_contact": by_contact, "contact_hold": hold}
+
+        def pick(value, default, scale=1.0):
+            return default if value is None else value * scale
+
+        phase_settings = {
+            "by_contact": task_error.by_contact if args.phase_judge is None else args.phase_judge == "contact",
+            "contact_window": pick(args.phase_contact_window, task_error.contact_window, 0.01),
+            "contact_confirm": pick(args.phase_contact_confirm, task_error.contact_confirm, 0.001),
+            "catch_up": pick(args.phase_catch_up, task_error.catch_up),
+        }
         env_cfg.phase_error = PhaseErrorCfg(
             pos_bias=args.phase_pos_bias / 100.0,
             pos_noise=args.phase_pos_noise / 100.0,
@@ -353,9 +394,11 @@ def main():
         is_stair = stair_env_mask(base_env)
         is_walk = ~is_stair
         if phase_settings:
-            judge = "접촉" if phase_settings["by_contact"] else "높이"
-            hold_ms = phase_settings["contact_hold"] * 1000.0
-            print(f"[INFO] 딛고 있음 판정: {judge}" + (f", 접촉 유지 {hold_ms:.0f}ms" if phase_settings["by_contact"] else ""))
+            s = phase_settings
+            judge = "높이 3cm"
+            if s["by_contact"]:
+                judge += f" 또는 (스위치 + 높이 {s['contact_window'] * 100:.1f}cm, {s['contact_confirm'] * 1000:.0f}ms 유지)"
+            print(f"[INFO] 딛고 있음 판정: {judge} | 전진 건너뛰기: {'켬' if s['catch_up'] else '끔'}")
 
         if args.phase_sweep:
             run_phase_sweep(env, policy, tracker, is_stair, make_error_cfg)

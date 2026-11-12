@@ -117,7 +117,7 @@ class PhaseMeasurement(NamedTuple):
     in_contact: torch.Tensor  # 발 접촉 (N, 6)
     front_coxa: torch.Tensor  # 앞다리 coxa 각도 [rad] (N, 2)
     speed: torch.Tensor       # 몸통 속도 크기 (N,)
-    recent_contact: torch.Tensor | None = None  # 최근 contact_hold 안에 접촉한 발 (N, 6). 접촉 판정에서만 쓴다
+    contact_ground: torch.Tensor | None = None  # 스위치로 딛고 있다고 확인된 발 (N, 6). by_contact에서만 쓴다 (PhaseEstimator)
     sole_contact: torch.Tensor | None = None    # 바닥 방향 힘으로 본 접촉 (N, 6). 실물 발끝 스위치에 해당
 
 
@@ -256,8 +256,8 @@ class StairTracker:
         """측정값으로 이번 step에 단계가 끝나는지 판정한다. 상태를 바꾸지 않는다.
         StairTracker(참값)와 PhaseEstimator(오차 있는 값)가 같은 조건을 쓰도록 여기에 모았다.
 
-        by_contact: 딛고 있음에 발끝 스위치를 더한다. 발이 눌려 있으면 발끝 높이가 틀려도 딛고 있다고 보므로
-        높이 오차에 강하다. 참값 tracker와 teacher 보상은 쓰지 않는다."""
+        by_contact: 딛고 있음에 m.contact_ground(스위치가 눌리고 높이가 넓은 범위 안인 발)를 OR로 더한다.
+        높이 편향으로 3cm 조건이 실패할 때 받쳐 준다. 참값 tracker와 teacher 보상은 쓰지 않는다."""
         gait = self.gait
         phase, level = self.phase_and_level(move)
         riser, top = self.riser_and_top(level)
@@ -272,9 +272,8 @@ class StairTracker:
         terrain = stairs_terrain_height(self.stairs, tips[..., 0], tips[..., 1])
         near_ground = (tips[..., 2] - terrain - gait.tip_height).abs() < gait.contact_tol
         if by_contact:
-            # 발끝 스위치가 눌린 발은 높이와 상관없이 딛고 있다고 본다 (높이 오차로 높이 조건이 실패할 때 받쳐 준다)
             # 발 밑 단은 그대로 발끝 x의 지형이다. 발끝 높이로 단을 정하면 공중에서 윗단 높이를 지나는 발도 통과해 앞섰다
-            near_ground = near_ground | m.recent_contact
+            near_ground = near_ground | m.contact_ground
 
         # 몸통 x: 보상 상한으로 자른 값의 신기록. 새 단계의 첫 step은 지금 값에서 시작
         limit_x = riser + self.table_body_x[phase]

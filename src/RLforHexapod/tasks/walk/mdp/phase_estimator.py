@@ -2,7 +2,12 @@
 
 실물에서는 Point-LIO의 위치, 지도에서 찾은 수직면, 관절각으로 계산한 발끝, 발 접촉으로 단계를 계산한다.
 여기서는 참값에 오차를 더한 측정값을 StairTracker와 같은 조건(check_phase)에 넣는다.
-오차가 전부 0이고 by_contact=False이면 StairTracker와 항상 같은 단계가 나온다.
+오차가 전부 0이고 by_contact=False, catch_up=False이면 StairTracker와 항상 같은 단계가 나온다.
+
+편향이 있으면 추정이 한 단계에서 영영 멈출 수 있다 (참값은 기준을 겨우 넘기고 다음 단계로 가 버린다).
+그래서 실물에서도 쓸 두 가지 복구를 둔다.
+- by_contact: 높이 3cm 조건에 "발끝 스위치가 눌리고 높이 contact_window 안"을 OR로 더한다 (높이 편향 대책)
+- catch_up: 전진 단계에서 다음 옮기기 단계가 이미 끝났으면 두 칸 진행한다 (x 편향, 앞다리 접힘 대책)
 
 teacher의 정답과 성공 판정은 계속 참값(StairTracker)을 쓴다. student만 이 추정값을 본다.
 """
@@ -10,6 +15,8 @@ teacher의 정답과 성공 판정은 계속 참값(StairTracker)을 쓴다. stu
 import torch
 from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import quat_apply
+
+from .observations import stairs_terrain_height
 
 
 @configclass
@@ -28,11 +35,14 @@ class PhaseErrorCfg:
     contact_flip: float = 0.0  # 발 접촉 판정이 뒤집힐 확률. 발마다 step마다
     delay: float = 0.0         # 단계 계산 지연 [s]
     randomize: bool = False
-    # 판정 방식. True면 딛고 있음에 발끝 스위치(바닥 방향 힘)를 더한다 (StairTracker.check_phase 참고)
+    # 딛고 있음 = 높이 3cm 안 OR (by_contact일 때) 발끝 스위치가 눌리고 높이 contact_window 안
+    # 높이 제한 없이 스위치만 OR하면 오차 0에서 teacher보다 16% 앞섰다. 공중의 발은 스위치가 안 눌려 걸러진다
     by_contact: bool = False
-    # by_contact에서 접촉이 이 시간 안에 있었으면 딛고 있다고 본다 [s]. 0 = 지금 접촉만
-    # 0.1초로 두면 막 들어 올린 발도 딛고 있다고 봐서 단계가 teacher보다 앞섰다 (오차 0에서 일치 66%, 0이면 100%)
-    contact_hold: float = 0.0
+    contact_window: float = 0.08   # 스위치로 인정할 발끝 높이 차 [m]. 단 높이(16cm)의 절반
+    # 스위치로만 통과하는 상태가 이 시간 이어져야 인정한다 [s]. 0 = 바로. teacher가 잠깐 지나가는 상태를 거른다
+    contact_confirm: float = 0.0
+    # 전진 단계가 안 끝났는데 다음 옮기기(마지막 전진이면 정지) 단계가 이미 끝났으면 두 칸 진행한다
+    catch_up: bool = False
 
 
 class PhaseEstimator:
@@ -56,7 +66,9 @@ class PhaseEstimator:
         self.best_body_x = torch.zeros(n, device=device)
         self.need_init = torch.ones(n, dtype=torch.bool, device=device)
         self.steady_time = torch.zeros(n, device=device)
-        self.since_contact = torch.zeros(n, len(foot_names), device=device)  # 마지막 접촉 뒤 지난 시간 [s]
+        self.pressed_time = torch.zeros(n, len(foot_names), device=device)  # 스위치로만 딛고 있다고 본 시간 [s]
+        self.ahead_steady_time = torch.zeros(n, device=device)  # catch_up: 다음 단계(정지)를 내다본 멈춘 시간 [s]
+        self.catch_ups = torch.zeros((), dtype=torch.long, device=device)  # catch_up으로 건너뛴 횟수 (평가 로그용)
 
         # env별 오차. 리셋 때 뽑는다
         self.pos_bias = torch.zeros(n, 2, device=device)                     # (x, z) [m]
@@ -73,6 +85,7 @@ class PhaseEstimator:
         # 0번이 가장 최근. 지연이 0이면 칸이 하나뿐이다
         self.history = self.move.unsqueeze(1).repeat(1, self.max_delay_steps + 1)
         self.delay_steps = self.delay_steps.clamp(max=self.max_delay_steps)
+        self.catch_ups = torch.zeros_like(self.catch_ups)
 
     @property
     def delayed_move(self) -> torch.Tensor:
@@ -97,7 +110,8 @@ class PhaseEstimator:
         self.best_body_x[env_ids] = 0.0
         self.need_init[env_ids] = True
         self.steady_time[env_ids] = 0.0
-        self.since_contact[env_ids] = 0.0
+        self.pressed_time[env_ids] = 0.0
+        self.ahead_steady_time[env_ids] = 0.0
         self.history[env_ids] = moves.unsqueeze(1).repeat(1, self.history.shape[1])
 
         self.pos_bias[env_ids, 0] = self._signed((count,), cfg.pos_bias)
@@ -133,24 +147,51 @@ class PhaseEstimator:
             tips = tips + self._tip_error_from_joints(tips)
         tips = torch.stack([tips[..., 0] + error_x.unsqueeze(1), tips[..., 1], tips[..., 2] + error_z.unsqueeze(1)], dim=-1)
 
-        # 접촉 판정은 실물처럼 발끝 스위치(바닥 방향 힘)만 쓴다. 높이 판정은 참값 tracker와 같은 접촉을 쓴다
-        sensed = truth.sole_contact if cfg.by_contact else truth.in_contact
-        flips = torch.rand(sensed.shape, device=self.device) < self.contact_flip.unsqueeze(1)
-        contact = sensed ^ flips
-        self.since_contact = torch.where(contact, torch.zeros_like(self.since_contact), self.since_contact + self.env.step_dt)
+        # 접촉은 참값 tracker와 같은 값에 같은 오판을 넣는다. 오판은 발끝 스위치에도 똑같이 들어간다
+        flips = torch.rand(truth.in_contact.shape, device=self.device) < self.contact_flip.unsqueeze(1)
+        contact = truth.in_contact ^ flips
+        contact_ground = None
+        if cfg.by_contact:
+            # 스위치가 눌리고 발끝 높이가 발 밑 지형(발끝 x로 고른 단)에서 contact_window 안
+            gait = self.tracker.gait
+            terrain = stairs_terrain_height(self.tracker.stairs, tips[..., 0], tips[..., 1])
+            height_gap = (tips[..., 2] - terrain - gait.tip_height).abs()
+            pressed = (truth.sole_contact ^ flips) & (height_gap < cfg.contact_window)
+            # 높이 3cm 조건은 실패하고 스위치로만 통과하는 상태가 이어진 시간. 높이로 통과하면 다시 잰다
+            # (눌린 시간으로 재면 오래 딛고 있던 발이 잠깐 높게 읽힐 때 바로 통과해서 거르지 못한다)
+            switch_only = pressed & (height_gap >= gait.contact_tol)
+            self.pressed_time = torch.where(
+                switch_only, self.pressed_time + self.env.step_dt, torch.zeros_like(self.pressed_time)
+            )
+            contact_ground = switch_only & (self.pressed_time >= cfg.contact_confirm + self.env.step_dt - 1e-6)
         measured = truth._replace(
             body_x=truth.body_x + error_x,
             tips=tips,
             in_contact=contact,
             front_coxa=truth.front_coxa + self.joint_bias[:, self.tracker.front_feet, 0],
-            recent_contact=self.since_contact <= cfg.contact_hold + 1e-6,
+            contact_ground=contact_ground,
         )
 
-        check = self.tracker.check_phase(
+        tracker = self.tracker
+        check = tracker.check_phase(
             self.move, self.best_body_x, self.need_init, self.steady_time, measured, by_contact=cfg.by_contact
         )
+        steps = check.done.long()
+        if cfg.catch_up:
+            # 다음 단계를 방금 시작한 것처럼 판정한다. 정지 단계는 1초를 채워야 끝나므로 내다본 쪽 멈춘 시간을 따로 잰다
+            phase, _ = tracker.phase_and_level(self.move)
+            advancing = (tracker.table_kind[phase] == 0) & (self.move <= tracker.final_advance)  # 0 = ADVANCE
+            ahead = tracker.check_phase(
+                self.move + 1, self.best_body_x, torch.ones_like(self.need_init), self.ahead_steady_time, measured,
+                by_contact=cfg.by_contact,
+            )
+            jump = advancing & ~check.done & ahead.done
+            self.ahead_steady_time = torch.where(advancing, ahead.steady_time, torch.zeros_like(self.ahead_steady_time))
+            steps = torch.where(jump, 2, steps)
+            self.catch_ups = self.catch_ups + jump.sum()
         self.best_body_x = check.best_body_x
         self.steady_time = check.steady_time
-        self.move = self.move + check.done.long()
-        self.need_init = check.done.clone()
+        self.move = self.move + steps
+        self.need_init = steps > 0
+        self.ahead_steady_time = torch.where(steps > 0, torch.zeros_like(self.ahead_steady_time), self.ahead_steady_time)
         self.history = torch.cat([self.move.unsqueeze(1), self.history[:, :-1]], dim=1)
