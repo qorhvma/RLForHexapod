@@ -17,6 +17,11 @@ A-Phase student(참값 단계로 증류한 체크포인트)가 계단을 오르�
 
 --resume으로 이어 학습할 때는 --dagger_iters 0을 주면 처음부터 신경망 출력으로 움직인다.
 
+단계별 가중치 (--class_weight_power): 단계마다 시간 비중이 크게 다르다 (꼭대기에 서 있는 정지가 약 50%).
+가중치가 없으면 애매할 때 정지로 답하는 쪽으로 학습돼, 마지막 단의 접기 전진·뒷발에서 정지를 일찍 말한다.
+그래서 손실에서 단계 c의 가중치를 (시간 비중)^(-power)로 준다. 1 = 시간 비중에 반비례 (단계마다 손실 몫이 같음),
+0 = 가중치 없음. 시간 비중은 정답 단계를 iteration마다 세어 지수 평균한다. 가중치는 WEIGHT_RANGE로 자른다.
+
 결과는 logs/phase_net/<시각>/model_<iter>.pt. TensorBoard:
 - Phase/accuracy_net: 신경망 출력으로 움직인 env에서의 정답률
 - Phase/stuck_share: 신경망으로 움직인 env에서 0.5초 넘게 계속 틀리고 있는 step의 비율 (규칙 추정기의 "뒤처져 굳음"에 해당)
@@ -48,6 +53,16 @@ TRAIN_ERRORS = {
     "contact_flip": 0.05,
 }
 STUCK_STEPS = 25  # 0.5초 (step 0.02초)
+WEIGHT_RANGE = (0.1, 10.0)  # 단계별 가중치 하한·상한 (평균 1 기준). 아주 드문 단계가 손실을 독차지하지 않게
+SHARE_DECAY = 0.95  # 단계별 시간 비중의 지수 평균
+
+
+def class_weights(share: torch.Tensor, power: float) -> torch.Tensor:
+    """단계별 가중치 = share^(-power), 데이터 전체의 평균 가중치가 1이 되게 맞춘 뒤 WEIGHT_RANGE로 자른다."""
+    share = share / share.sum().clamp_min(1e-12)
+    weight = share.clamp_min(1e-4) ** (-power)
+    weight = weight / (share * weight).sum().clamp_min(1e-12)
+    return weight.clamp(*WEIGHT_RANGE)
 
 
 def main():
@@ -80,6 +95,8 @@ def main():
                         help="A-Phase에 넣는 형태. onehot = 가장 그럴듯한 단계 (A-Phase가 학습한 형태)")
     parser.add_argument("--dagger_iters", type=int, default=300, help="참값으로 움직이는 비율을 1 → 0으로 줄이는 iteration 수")
     parser.add_argument("--error_scale", type=float, default=1.0, help="학습용 센서 오차 크기 배율. 0 = 오차 없음")
+    parser.add_argument("--class_weight_power", type=float, default=1.0,
+                        help="단계별 손실 가중치 = (시간 비중)^(-power). 1 = 반비례, 0 = 가중치 없음")
     parser.add_argument("--save_interval", type=int, default=100)
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
@@ -153,6 +170,8 @@ def main():
         buf_done = torch.zeros(T, n, dtype=torch.bool, device=device)
         buf_forced = torch.zeros(T, n, dtype=torch.bool, device=device)
         h0 = torch.zeros(n, net.config["hidden_dim"], device=device)
+        share = saved.get("class_share")  # 단계별 시간 비중 (지수 평균). 이어 학습이면 저장된 값부터
+        share = None if share is None else share.to(device)
         wrong_streak = torch.zeros(n, dtype=torch.long, device=device)
 
         def true_phase():
@@ -201,6 +220,10 @@ def main():
             # ----- 학습 -----
             net.train()
             net.norm.update(buf_x)
+            counts = torch.bincount(buf_y.flatten(), minlength=num_classes).float()
+            counts = counts / counts.sum()
+            share = counts if share is None else SHARE_DECAY * share + (1.0 - SHARE_DECAY) * counts
+            weight = class_weights(share, args.class_weight_power)
             total_loss, total_correct, batches = 0.0, 0.0, 0
             for _ in range(args.epochs):
                 for ids in torch.randperm(n, device=device).chunk(args.mini_batches):
@@ -209,7 +232,7 @@ def main():
                     correct = torch.zeros((), device=device)
                     for t in range(T):
                         logits, hidden = net.step(buf_x[t, ids], hidden)
-                        loss = loss + F.cross_entropy(logits, buf_y[t, ids])
+                        loss = loss + F.cross_entropy(logits, buf_y[t, ids], weight=weight)
                         correct += (logits.argmax(dim=-1) == buf_y[t, ids]).float().mean().detach()
                         hidden = hidden * (~buf_done[t, ids]).unsqueeze(1).float()
                     loss = loss / T
@@ -229,6 +252,9 @@ def main():
                 "Phase/stuck_share": (stuck / count_net.clamp_min(1)).item(),
                 "Phase/beta": beta,
             }
+            for c in range(num_classes):
+                stats[f"Phase/share_{c}"] = share[c].item()
+                stats[f"Phase/weight_{c}"] = weight[c].item()
             for key, values in env_logs.items():
                 if key.startswith("Metrics/"):
                     stats[key] = sum(values) / len(values)
@@ -244,10 +270,13 @@ def main():
                     f"| 참값 비율 {beta:.2f} | 꼭대기 {top:.2f} | {time.time() - started:.1f}s",
                     flush=True,
                 )
+            if it % 100 == 0:
+                print("    단계별 시간 비중 / 가중치: " + ", ".join(
+                    f"{c}: {share[c].item():.0%}/{weight[c].item():.2f}" for c in range(num_classes)), flush=True)
             last = it == start_iter + args.iterations - 1
             if it % args.save_interval == 0 or last:
                 path = os.path.join(log_dir, f"model_{it}.pt")
-                net.save(path, {"iteration": it, "optimizer": optimizer.state_dict(), "policy": args.policy,
+                net.save(path, {"iteration": it, "optimizer": optimizer.state_dict(), "policy": args.policy, "class_share": share.cpu(),
                                 "train_errors": errors})
         if writer is not None:
             writer.close()
