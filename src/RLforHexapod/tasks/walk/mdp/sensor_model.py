@@ -52,6 +52,9 @@ class SensorErrorCfg:
     foot_height_bias: float = 0.0   # 나머지 편향 (기준 발이 모서리에 걸침 등) [m]. 모든 발 공통
     foot_height_noise: float = 0.0  # 나머지 노이즈 std [m]. step마다
     randomize: bool = False
+    # 에피소드마다 이 확률로 편향(에피소드 고정 오차)을 모두 0으로 한다. 노이즈·오판·구멍·주기는 그대로 둔다.
+    # 단계 추정 신경망 학습용: 편향이 늘 있으면 신경망이 "규칙이 멈추면 넘어간다"를 배워 맞는 규칙도 앞지른다
+    bias_free_ratio: float = 0.0
 
 
 class SensorModel:
@@ -78,6 +81,7 @@ class SensorModel:
         self.foot_height_bias = torch.zeros(n, device=device)
         self.foot_height_noise = torch.zeros(n, device=device)
         self.period_offset = torch.zeros(n, dtype=torch.long, device=device)  # env마다 높이맵 갱신 시점을 어긋나게
+        self.bias_free = torch.zeros(n, dtype=torch.bool, device=device)  # 이번 에피소드는 편향 없음 (bias_free_ratio)
         # step 오차 (begin_step에서 뽑는다)
         self.x_error = torch.zeros(n, device=device)
         self.flips = torch.zeros(n, self.num_feet, dtype=torch.bool, device=device)
@@ -118,6 +122,15 @@ class SensorModel:
         self.foot_height_bias[env_ids] = self._signed((count,), cfg.foot_height_bias)
         self.foot_height_noise[env_ids] = self._scale(count, cfg.foot_height_noise)
         self.period_offset[env_ids] = torch.randint(self.period_steps, (count,), device=self.device)
+        self.bias_free[env_ids] = False
+        if cfg.bias_free_ratio > 0.0:
+            free = torch.rand(count, device=self.device) < cfg.bias_free_ratio
+            self.bias_free[env_ids] = free
+            keep = (~free).float()
+            for bias in (self.x_bias, self.range_bias, self.step_height_error, self.foot_height_bias):
+                bias[env_ids] = bias[env_ids] * keep
+            for bias in (self.mount_tilt, self.imu_tilt, self.encoder_bias):
+                bias[env_ids] = bias[env_ids] * keep.unsqueeze(1)
         # 리셋 뒤 같은 step의 첫 관측도 새 편향을 쓴다
         self.x_error[env_ids] = self.x_bias[env_ids]
         self.flips[env_ids] = False

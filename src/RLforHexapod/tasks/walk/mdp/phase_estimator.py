@@ -64,6 +64,7 @@ class PhaseEstimator:
         self.best_body_x = torch.zeros(n, device=device)
         self.need_init = torch.ones(n, dtype=torch.bool, device=device)
         self.steady_time = torch.zeros(n, device=device)
+        self.phase_time = torch.zeros(n, device=device)  # 지금 단계에 머문 시간 [s] (단계 추정 신경망 입력)
         self.pressed_time = torch.zeros(n, len(foot_names), device=device)  # 스위치로만 딛고 있다고 본 시간 [s]
         self.ahead_steady_time = torch.zeros(n, device=device)  # catch_up: 다음 단계(정지)를 내다본 멈춘 시간 [s]
         self.catch_ups = torch.zeros((), dtype=torch.long, device=device)  # catch_up으로 건너뛴 횟수 (평가 로그용)
@@ -90,6 +91,7 @@ class PhaseEstimator:
         self.best_body_x[env_ids] = 0.0
         self.need_init[env_ids] = True
         self.steady_time[env_ids] = 0.0
+        self.phase_time[env_ids] = 0.0
         self.pressed_time[env_ids] = 0.0
         self.ahead_steady_time[env_ids] = 0.0
         self.history[env_ids] = moves.unsqueeze(1).repeat(1, self.history.shape[1])
@@ -177,5 +179,6 @@ class PhaseEstimator:
         self.steady_time = check.steady_time
         self.move = self.move + steps
         self.need_init = steps > 0
+        self.phase_time = torch.where(steps > 0, torch.zeros_like(self.phase_time), self.phase_time + self.env.step_dt)
         self.ahead_steady_time = torch.where(steps > 0, torch.zeros_like(self.ahead_steady_time), self.ahead_steady_time)
         self.history = torch.cat([self.move.unsqueeze(1), self.history[:, :-1]], dim=1)

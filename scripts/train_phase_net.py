@@ -35,8 +35,15 @@ A-Phase student(참값 단계로 증류한 체크포인트)가 계단을 오르�
 편향이 있으면 한 단계에서 굳는다. 신경망은 이력을 1.28초(--steps)보다 길게 배우기 어렵고 기준을 데이터로 흉내 내야 한다.
 그래서 규칙 판정을 출발점으로 주고, 판정 값을 보고 규칙이 굳은 경우만 고치게 한다. 오차가 없으면 규칙 단계를 그대로 따르면 된다.
 
+규칙 정지 시간 (phase_timer 관측 그룹, 규칙 특징과 함께 기본으로 넣음, --no_timer로 뺌, mdp.stair_rule_phase_time):
+규칙이 지금 단계에 머문 시간. 편향이 늘 있는 데이터로만 학습하니, 신경망이 "규칙이 멈추면 넘어간다"를 배워
+오차가 없을 때도 27% 앞섰다 (앞서면 정책이 다음 단계 동작을 해서 참값 단계가 끝나지 않고 굳는다).
+그래서 --bias_free_ratio(기본 0.6)만큼의 에피소드는 편향을 0으로 하고 (노이즈·오판은 그대로),
+신경망이 "평소엔 규칙을 따르고, 규칙이 비정상적으로 오래 멈추면 넘어간다"를 배울 수 있게 머문 시간을 준다.
+
 결과는 logs/phase_net/<시각>/model_<iter>.pt. TensorBoard:
 - Phase/accuracy_net: 신경망 출력으로 움직인 env에서의 정답률
+- Phase/accuracy_bias_free, Phase/accuracy_biased: 그중 편향 없는 / 있는 에피소드
 - Phase/stuck_share: 신경망으로 움직인 env에서 0.5초 넘게 계속 틀리고 있는 step의 비율 (규칙 추정기의 "뒤처져 굳음"에 해당)
 - Metrics/*: env 로그 (stair_reached_top 등, 참값으로 움직인 에피소드도 섞여 있다)
 """
@@ -104,6 +111,7 @@ def main():
     from RLforHexapod.tasks.walk.config.hexapod.agents.phase_net import (
         EXTRA_GROUP,
         RULE_GROUP,
+        TIMER_GROUP,
         PhaseNet,
         PhaseNetPolicy,
         net_input,
@@ -133,6 +141,10 @@ def main():
                         help="phase_net 관측 그룹(몸통 x, 발끝 높이)을 입력에 넣지 않는다")
     parser.add_argument("--no_rule", action="store_true",
                         help="phase_rule 관측 그룹(규칙 추정기의 단계와 판정 값)을 입력에 넣지 않는다")
+    parser.add_argument("--no_timer", action="store_true",
+                        help="phase_timer 관측 그룹(규칙이 지금 단계에 머문 시간)을 입력에 넣지 않는다")
+    parser.add_argument("--bias_free_ratio", type=float, default=0.6,
+                        help="편향(에피소드 고정 오차)을 0으로 하는 에피소드 비율. 노이즈·오판은 그대로 둔다")
     parser.add_argument("--save_interval", type=int, default=100)
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
@@ -147,9 +159,13 @@ def main():
     if args.resume:
         saved_groups = torch.load(args.resume, map_location="cpu", weights_only=False)["config"].get("extra_groups", [])
     else:
-        saved_groups = [g for g, off in ((EXTRA_GROUP, args.no_extra), (RULE_GROUP, args.no_rule)) if not off]
+        no_timer = args.no_timer or args.no_rule  # 머문 시간은 규칙 단계와 함께 볼 때만 의미가 있다
+        saved_groups = [
+            g for g, off in ((EXTRA_GROUP, args.no_extra), (RULE_GROUP, args.no_rule), (TIMER_GROUP, no_timer)) if not off
+        ]
     train_errors = {**TRAIN_ERRORS, **(RULE_ERRORS if RULE_GROUP in saved_groups else {})}
     errors = {k: v * args.error_scale for k, v in train_errors.items()}
+    errors["bias_free_ratio"] = args.bias_free_ratio
     sensor_cfg = SensorErrorCfg(**errors, randomize=True)
     env_cfg.sensor_error = sensor_cfg
 
@@ -173,8 +189,11 @@ def main():
         sensors.configure(SensorErrorCfg(**errors, randomize=True))
         env.reset()  # 여기서 새 설정으로 오차를 뽑는다
         print(f"[INFO] 학습 센서 오차 (에피소드마다 0 ~ 이 값): {nonzero_fields(sensors.cfg)}")
-        print(f"[INFO] 뽑힌 오차: 라이다 x 편향 |평균| {sensors.x_bias.abs().mean().item() * 100:.2f}cm, "
-              f"엔코더 편향 |평균| {math.degrees(sensors.encoder_bias.abs().mean().item()):.2f}도")
+        biased = ~sensors.bias_free
+        print(f"[INFO] 편향 없는 에피소드 {sensors.bias_free.float().mean().item():.0%} "
+              f"(--bias_free_ratio {args.bias_free_ratio}). 나머지 에피소드의 뽑힌 편향: "
+              f"라이다 x |평균| {sensors.x_bias[biased].abs().mean().item() * 100:.2f}cm, "
+              f"엔코더 |평균| {math.degrees(sensors.encoder_bias[biased].abs().mean().item()):.2f}도")
         if args.error_scale == 0.0:
             print("[INFO] --error_scale 0: 센서 오차 없이 학습합니다 (진단용)")
 
@@ -197,7 +216,7 @@ def main():
             extra_groups = saved_groups
             missing = [g for g in extra_groups if g not in obs.keys()]
             if missing:
-                parser.error(f"{args.task} 관측에 {missing} 그룹이 없습니다. --no_extra/--no_rule을 쓰거나 A-Phase 계열 task를 쓰세요.")
+                parser.error(f"{args.task} 관측에 {missing} 그룹이 없습니다. --no_extra/--no_rule/--no_timer를 쓰거나 A-Phase 계열 task를 쓰세요.")
         input_dim = net_input(obs, cut, extra_groups).shape[1]
         if not args.resume:
             net = PhaseNet(input_dim, args.hidden, num_classes, args.input_mode, extra_groups).to(device)
@@ -244,6 +263,8 @@ def main():
             correct_net = torch.zeros((), device=device)
             count_net = torch.zeros((), device=device)
             stuck = torch.zeros((), device=device)
+            correct_free = torch.zeros((), device=device)  # 편향 없는 에피소드 중 신경망으로 움직인 env
+            count_free = torch.zeros((), device=device)
             env_logs: dict[str, list[float]] = {}
 
             # ----- 데이터 모으기 -----
@@ -263,6 +284,9 @@ def main():
                     by_net = ~wrapped.forced
                     correct_net += (~wrong & by_net).sum()
                     count_net += by_net.sum()
+                    free = by_net & sensors.bias_free
+                    correct_free += (~wrong & free).sum()
+                    count_free += free.sum()
                     wrong_streak = torch.where(wrong, wrong_streak + 1, torch.zeros_like(wrong_streak))
                     stuck += ((wrong_streak >= STUCK_STEPS) & by_net).sum()
 
@@ -310,6 +334,9 @@ def main():
                 "Phase/accuracy_train": total_correct / batches,
                 "Phase/accuracy_net": (correct_net / count_net.clamp_min(1)).item() if count_net > 0 else float("nan"),
                 "Phase/stuck_share": (stuck / count_net.clamp_min(1)).item(),
+                "Phase/accuracy_bias_free": (correct_free / count_free).item() if count_free > 0 else float("nan"),
+                "Phase/accuracy_biased": ((correct_net - correct_free) / (count_net - count_free)).item()
+                if count_net > count_free else float("nan"),
                 "Phase/beta": beta,
             }
             for c in range(num_classes):
@@ -326,7 +353,8 @@ def main():
                 top = stats.get("Metrics/stair_reached_top", float("nan"))
                 print(
                     f"[{it}] loss {stats['Phase/loss']:.3f} | 정답률 (학습) {stats['Phase/accuracy_train']:.1%} "
-                    f"(신경망으로 움직인 env) {stats['Phase/accuracy_net']:.1%} | 0.5초+ 틀림 {stats['Phase/stuck_share']:.1%} "
+                    f"(신경망으로 움직인 env) {stats['Phase/accuracy_net']:.1%} "
+                    f"[편향 없음 {stats['Phase/accuracy_bias_free']:.1%} / 있음 {stats['Phase/accuracy_biased']:.1%}] | 0.5초+ 틀림 {stats['Phase/stuck_share']:.1%} "
                     f"| 참값 비율 {beta:.2f} | 꼭대기 {top:.2f} | {time.time() - started:.1f}s",
                     flush=True,
                 )

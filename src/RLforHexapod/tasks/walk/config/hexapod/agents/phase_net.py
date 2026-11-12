@@ -9,6 +9,7 @@ A-Phase는 순간 오차(지연, 접촉 뒤집힘)에는 fine-tune 없이도 강
             phase_net  = 라이다로 잰 몸통 x, 몸통 기준 발끝 높이
             phase_rule = 규칙 추정기의 단계와 판정 값 (발마다 수직면을 넘은 거리, 지면 위 높이 등).
                          오차가 없으면 규칙 단계를 따라 하면 되므로, 신경망은 규칙이 굳는 경우만 고치면 된다
+            phase_timer = 규칙이 지금 단계에 머문 시간. 신경망 기억(1.28초)보다 긴 정지를 셀 수 있게 한다
     구조: 입력 정규화 → GRU → Linear → 단계 logits (7, stair_phase_obs와 같은 순서)
     학습: scripts/train_phase_net.py (참값 단계에 대한 cross-entropy)
     평가: scripts/eval_stairs.py --phase_net <model.pt>
@@ -23,6 +24,7 @@ import torch.nn.functional as F
 PHASE_TERM = "phase"  # A-Phase student 관측에서 단계 칸의 이름 (env_cfg.StudentAPhaseObservationsCfg)
 EXTRA_GROUP = "phase_net"  # 신경망만 보는 추가 관측 그룹 (env_cfg.StudentAPhaseObservationsCfg.PhaseNetCfg)
 RULE_GROUP = "phase_rule"  # 규칙 추정기의 판정과 판정 값 (env_cfg.StudentAPhaseObservationsCfg.PhaseRuleCfg)
+TIMER_GROUP = "phase_timer"  # 규칙 추정기가 지금 단계에 머문 시간 (env_cfg.StudentAPhaseObservationsCfg.PhaseTimerCfg)
 
 
 class RunningNorm(nn.Module):

@@ -414,9 +414,21 @@ class StudentAPhaseObservationsCfg(StudentAObservationsCfg):
             self.concatenate_terms = True
             self.enable_corruption = False
 
+    @configclass
+    class PhaseTimerCfg(ObsGroup):
+        """단계 추정 신경망만 보는 규칙 추정기가 지금 단계에 머문 시간 (1). 잠깐 멈춘 것과 편향으로 굳은 것을 가른다.
+        phase_rule과 따로 둔 그룹이라 이것 없이 학습한 신경망도 그대로 평가할 수 있다."""
+
+        time = ObsTerm(func=mdp.stair_rule_phase_time)
+
+        def __post_init__(self):
+            self.concatenate_terms = True
+            self.enable_corruption = False
+
     student: StudentCfg = StudentCfg()
     phase_net: PhaseNetCfg = PhaseNetCfg()
     phase_rule: PhaseRuleCfg = PhaseRuleCfg()
+    phase_timer: PhaseTimerCfg = PhaseTimerCfg()
 
 
 @configclass

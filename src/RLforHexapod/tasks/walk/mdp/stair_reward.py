@@ -731,6 +731,20 @@ def stair_rule_features(env) -> torch.Tensor:
     ], dim=1)
 
 
+RULE_TIME_MAX = 10.0  # 규칙 단계에 머문 시간을 자르는 값 [s]
+RULE_TIME_SCALE = 2.0  # 나누는 값 [s]. 입력 범위 0 ~ 5
+
+
+def stair_rule_phase_time(env) -> torch.Tensor:
+    """규칙 추정기가 지금 단계에 머문 시간 / 2초 (N, 1), 10초에서 자른다. 단계 추정 신경망만 쓴다.
+    편향 없는 규칙은 로봇이 동작하는 동안만 잠깐 멈추고, 편향이 있으면 수 초씩 굳는다.
+    신경망 기억(1.28초)으로는 이 길이를 셀 수 없어서 밖에서 세어 준다. 실물에서도 규칙 추정기 옆에서 셀 수 있다."""
+    est = get_tracker(env).estimator
+    if est is None:
+        raise RuntimeError("stair_rule_phase_time을 쓰는 env 설정에는 phase_estimator가 있어야 합니다.")
+    return (est.phase_time.clamp(max=RULE_TIME_MAX) / RULE_TIME_SCALE).unsqueeze(1)
+
+
 def stair_feet_target_obs(env) -> torch.Tensor:
     """옮기는 두 발의 위치: 수직면 기준 x, 단 윗면 기준 z, tibia 수직도 (N, 6). 옮기는 발이 없으면 0, 한 발이면 같은 값이 두 번."""
     tracker = get_tracker(env)
