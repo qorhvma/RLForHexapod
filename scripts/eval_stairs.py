@@ -503,7 +503,7 @@ def main():
     from isaaclab_tasks.utils import resolve_task_config, setup_preset_cli
 
     import RLforHexapod.tasks  # noqa: F401
-    from RLforHexapod.tasks.walk.mdp import PhaseEstimatorCfg, SensorErrorCfg, stair_env_mask
+    from RLforHexapod.tasks.walk.mdp import PhaseEstimatorCfg, SensorErrorCfg, get_sensor_model, stair_env_mask
 
     parser = argparse.ArgumentParser(description="저장된 정책의 계단 오르기 평가")
     parser.add_argument("--task", required=True, help="Hexapod-Stair 또는 Hexapod-Stair-Student-*")
@@ -601,6 +601,10 @@ def main():
         env = gym.make(args.task, cfg=env_cfg)
         cleanup.callback(env.close)
         env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)  # 여기서 첫 리셋이 일어난다
+        if is_student and not args.teacher:
+            # 센서 오차를 env에 직접 넣는다 (env 설정만 바꾸면 복사 과정에서 빠질 수 있다)
+            get_sensor_model(env.unwrapped).configure(env_cfg.sensor_error)
+            env.reset()
 
         runner = create_rsl_rl_runner(env, agent_cfg)
         print(f"[INFO] 체크포인트: {args.checkpoint}")

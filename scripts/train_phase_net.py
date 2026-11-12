@@ -42,6 +42,7 @@ A-Phase student(참값 단계로 증류한 체크포인트)가 계단을 오르�
 """
 
 import argparse
+import dataclasses
 import importlib.metadata
 import json
 import math
@@ -74,6 +75,11 @@ RULE_ERRORS = {
 STUCK_STEPS = 25  # 0.5초 (step 0.02초)
 WEIGHT_RANGE = (0.1, 10.0)  # 단계별 가중치 하한·상한 (평균 1 기준). 아주 드문 단계가 손실을 독차지하지 않게
 SHARE_DECAY = 0.95  # 단계별 시간 비중의 지수 평균
+
+
+def nonzero_fields(cfg) -> dict:
+    """설정에서 0/False가 아닌 값만 (로그용)."""
+    return {f.name: getattr(cfg, f.name) for f in dataclasses.fields(cfg) if getattr(cfg, f.name) not in (0, 0.0, False)}
 
 
 def class_weights(share: torch.Tensor, power: float) -> torch.Tensor:
@@ -144,7 +150,8 @@ def main():
         saved_groups = [g for g, off in ((EXTRA_GROUP, args.no_extra), (RULE_GROUP, args.no_rule)) if not off]
     train_errors = {**TRAIN_ERRORS, **(RULE_ERRORS if RULE_GROUP in saved_groups else {})}
     errors = {k: v * args.error_scale for k, v in train_errors.items()}
-    env_cfg.sensor_error = SensorErrorCfg(**errors, randomize=True)
+    sensor_cfg = SensorErrorCfg(**errors, randomize=True)
+    env_cfg.sensor_error = sensor_cfg
 
     with launch_simulation(env_cfg, args):
         agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
@@ -160,6 +167,13 @@ def main():
         device = base_env.device
         tracker = base_env.stair_tracker
         n = base_env.num_envs
+        # 센서 오차를 env에 직접 넣는다. env 설정만 바꾸면 복사 과정에서 빠져 오차 없이 학습된 적이 있다
+        print(f"[INFO] env가 만든 센서 오차: {nonzero_fields(tracker.sensors.cfg)}")
+        tracker.sensors.configure(sensor_cfg)
+        env.reset()  # 여기서 새 설정으로 오차를 뽑는다
+        print(f"[INFO] 학습 센서 오차 (에피소드마다 0 ~ 이 값): {nonzero_fields(tracker.sensors.cfg)}")
+        print(f"[INFO] 뽑힌 라이다 x 편향 |평균| {tracker.sensors.x_bias.abs().mean().item() * 100:.2f}cm, "
+              f"엔코더 편향 |평균| {math.degrees(tracker.sensors.encoder_bias.abs().mean().item()):.2f}도")
 
         runner = create_rsl_rl_runner(env, agent_cfg)
         print(f"[INFO] A-Phase 정책: {args.policy}")

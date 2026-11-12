@@ -357,6 +357,9 @@ class StudentAObservationsCfg(StairsObservationsCfg):
 @configclass
 class HexapodStairStudentAEnvCfg(HexapodStairEnvCfg):
     observations: ObservationsCfg = StudentAObservationsCfg()
+    # student 관측과 단계 계산의 센서 오차 (기본 = 오차 없음). 스크립트가 바꿀 수 있게 필드로 둔다
+    # (필드가 아닌 속성으로 붙이면 env 설정을 복사할 때 빠질 수 있다)
+    sensor_error: mdp.SensorErrorCfg = mdp.SensorErrorCfg()
 
     def __post_init__(self):
         super().__post_init__()
