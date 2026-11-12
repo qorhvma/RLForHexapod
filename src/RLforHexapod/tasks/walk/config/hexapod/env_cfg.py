@@ -417,6 +417,26 @@ class HexapodStairStudentAPhaseNoiseEnvCfg(HexapodStairStudentAPhaseEnvCfg):
 
 
 @configclass
+class StudentAPhaseAuxObservationsCfg(StudentAObservationsCfg):
+    """student 관측은 A와 같다. 참값 단계를 학습 정답으로만 따로 둔다 (agents/phase_aux.py)."""
+
+    @configclass
+    class PhaseLabelCfg(ObsGroup):
+        phase = ObsTerm(func=mdp.stair_phase_obs)  # teacher가 보는 단계와 같은 one-hot (7). 노이즈 없음
+
+        def __post_init__(self):
+            self.concatenate_terms = True
+            self.enable_corruption = False
+
+    phase_label: PhaseLabelCfg = PhaseLabelCfg()
+
+
+@configclass
+class HexapodStairStudentAPhaseAuxEnvCfg(HexapodStairStudentAEnvCfg):
+    observations: ObservationsCfg = StudentAPhaseAuxObservationsCfg()
+
+
+@configclass
 class StudentTopEndTerminationsCfg(StairsTerminationsCfg):
     # 꼭대기에 서 있는 동안의 데이터가 학습을 방해하는지 확인한다
     reached_top = DoneTerm(func=mdp.stair_reached_top, time_out=True)

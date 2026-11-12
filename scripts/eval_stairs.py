@@ -14,6 +14,10 @@ teacher와 student를 같은 조건으로 비교한다.
     uv run python scripts/eval_stairs.py --task Hexapod-Student-A --checkpoint <teachers.pt> --teacher
     uv run python scripts/eval_stairs.py --task Hexapod-Student-A --checkpoint <student.pt>
 
+단계 보조 출력 student(Hexapod-Stair-Student-A-PhaseAux)는 단계 예측 정답률도 함께 보고한다 (단계별, 틀렸을 때 어느 단계로).
+
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-PhaseAux --checkpoint <student.pt>
+
 추정 단계를 보는 student(Hexapod-Stair-Student-A-Phase)는 단계 계산의 오차를 넣어 잴 수 있다.
 --phase_sweep은 오차별로 차례대로 재서 표로 보고한다. 설정마다 첫 에피소드 전체를 돌리므로 --num_envs 1024 정도를 권한다.
 
@@ -234,6 +238,54 @@ def phase_meter(tracker, mask):
     return on_step, counts, behind_at
 
 
+AUX_PHASE_NAMES = ["전진", "앞발", "중간발", "접기 전진", "뒷발1", "뒷발2", "정지"]  # stair_phase_obs 순서 (마지막 전진 = 전진)
+
+
+class PhaseAuxMeter:
+    """단계 보조 출력 student(Hexapod-Stair-Student-A-PhaseAux)의 단계 예측을 첫 에피소드 동안 참값과 비교한다.
+    정책을 감싸서, 정책에 들어간 관측의 phase_label(그 순간의 참값 단계)과 예측을 비교한다."""
+
+    def __init__(self, policy, mask):
+        self.policy, self.mask = policy, mask
+        n = len(AUX_PHASE_NAMES)
+        self.confusion = torch.zeros(n, n, device=mask.device)  # [참값, 예측]
+        self.label = self.predicted = None
+
+    def __call__(self, obs):
+        actions = self.policy(obs)
+        self.label = obs["phase_label"].argmax(dim=-1)
+        self.predicted = self.policy.last_phase_logits.argmax(dim=-1)
+        return actions
+
+    def reset(self, dones):
+        self.policy.reset(dones)
+
+    def chain(self, on_step):
+        def step(dones, finished):
+            # 방금 step의 관측은 아직 첫 에피소드였던 env만 센다 (끝난 step 포함)
+            active = self.mask & ~finished
+            index = self.label[active] * len(AUX_PHASE_NAMES) + self.predicted[active]
+            self.confusion.view(-1).add_(torch.bincount(index, minlength=self.confusion.numel()).float())
+            if on_step is not None:
+                on_step(dones, finished)
+
+        return step
+
+    def report(self):
+        total = self.confusion.sum().clamp_min(1.0)
+        lines = [f"\n단계 예측 (보조 출력): 정답률 {self.confusion.diag().sum() / total:.1%}"]
+        per_label = self.confusion.sum(dim=1)
+        for k, name in enumerate(AUX_PHASE_NAMES):
+            if per_label[k] == 0:
+                continue
+            row = self.confusion[k] / per_label[k]
+            wrong = ", ".join(
+                f"{AUX_PHASE_NAMES[j]} {row[j]:.0%}" for j in range(len(AUX_PHASE_NAMES)) if j != k and row[j] >= 0.01
+            )
+            lines.append(f"  {name}: {row[k]:.1%} (시간 비중 {per_label[k] / total:.0%})" + (f" | 틀린 예측: {wrong}" if wrong else ""))
+        return "\n".join(lines)
+
+
 def phase_shares(counts):
     """step 수를 (같음, 앞섬, 뒤처짐) 비율로."""
     return (counts / counts.sum().clamp_min(1.0)).tolist()
@@ -405,13 +457,18 @@ def main():
             return
 
         on_step, walk_totals, walk_steps = walk_meter(base_env, is_walk) if is_walk.any() else (None, None, None)
-        phase_counts = None
+        phase_counts = behind_at = None
         if tracker.estimator is not None and not is_walk.any():
-            on_step, phase_counts = phase_meter(tracker, is_stair)
+            on_step, phase_counts, behind_at = phase_meter(tracker, is_stair)
+        obs = env.get_observations()
+        aux_meter = None
+        if hasattr(policy, "last_phase_logits") and "phase_label" in obs.keys():
+            aux_meter = PhaseAuxMeter(policy, is_stair)
+            policy, on_step = aux_meter, aux_meter.chain(on_step)
         data = collect_first_episodes(
             env,
             policy,
-            env.get_observations(),
+            obs,
             tracker,
             base_env.termination_manager,
             base_env.max_episode_length + 1,
@@ -424,6 +481,13 @@ def main():
         if phase_counts is not None:
             same, ahead, behind = phase_shares(phase_counts)
             print(f"\n단계 추정: 일치 {same:.1%}, 앞섬 {ahead:.1%}, 뒤처짐 {behind:.1%}")
+            if behind_at.sum() > 0:
+                shares = (behind_at / behind_at.sum()).tolist()
+                print("  뒤처진 위치: " + ", ".join(
+                    f"{n} {s:.0%}" for n, s in zip(PHASE_NAMES, shares, strict=True) if s >= 0.005
+                ))
+        if aux_meter is not None:
+            print(aux_meter.report())
         if is_walk.any():
             print(format_walk_report(data, is_walk, walk_totals, walk_steps))
 

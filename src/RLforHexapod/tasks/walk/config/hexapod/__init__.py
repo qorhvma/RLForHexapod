@@ -53,6 +53,16 @@ gym.register(
 )
 
 gym.register(
+    id="Hexapod-Stair-Student-A-PhaseAux",
+    entry_point=f"{_PACKAGE}.hexapod_env:HexapodEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point":f"{_PACKAGE}.env_cfg:HexapodStairStudentAPhaseAuxEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{_PACKAGE}.agents.rsl_rl_distillation_cfg:HexapodStudentAPhaseAuxRunnerCfg"
+    },
+)
+
+gym.register(
     id="Hexapod-Stair-Student-A-PhaseNoise",
     entry_point=f"{_PACKAGE}.hexapod_env:HexapodEnv",
     disable_env_checker=True,

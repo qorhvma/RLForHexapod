@@ -63,6 +63,44 @@ class HexapodStudentAPhaseNoiseRunnerCfg(HexapodStudentRunnerCfg):
     max_iterations = 500
 
 
+# 단계 보조 출력: A와 관측·구조가 같고, GRU 출력에 단계 분류를 붙여 함께 학습한다 (agents/phase_aux.py)
+_PHASE_AUX = "RLforHexapod.tasks.walk.config.hexapod.agents.phase_aux"
+
+
+@configclass
+class PhaseAuxRNNModelCfg(RslRlRNNModelCfg):
+    class_name: str = f"{_PHASE_AUX}:PhaseAuxRNNModel"
+    num_phases: int = 7  # stair_phase_obs 크기 (6단계 + 정지)
+
+
+@configclass
+class PhaseAuxDistillationAlgorithmCfg(RslRlDistillationAlgorithmCfg):
+    class_name: str = f"{_PHASE_AUX}:PhaseAuxDistillation"
+    # 처음 단계 손실은 약 1.95(ln 7)로 행동 MSE보다 훨씬 크다. Loss/behavior가 A보다 나빠지면 줄인다
+    phase_loss_coef: float = 0.1
+    phase_label_group: str = "phase_label"
+
+
+@configclass
+class HexapodStudentAPhaseAuxRunnerCfg(HexapodStudentRunnerCfg):
+    run_name = "A_phase_aux"
+    student = PhaseAuxRNNModelCfg(
+        hidden_dims=[256, 128],
+        activation="elu",
+        obs_normalization=True,
+        distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=0.05),
+        rnn_type="gru",
+        rnn_hidden_dim=256,
+        rnn_num_layers=1,
+    )
+    algorithm = PhaseAuxDistillationAlgorithmCfg(
+        num_learning_epochs=2,
+        learning_rate=1.0e-3,
+        gradient_length=64,
+        max_grad_norm=1.0,
+    )
+
+
 @configclass
 class HexapodStudentATopEndRunnerCfg(HexapodStudentRunnerCfg):
     run_name = "A_top_end"
