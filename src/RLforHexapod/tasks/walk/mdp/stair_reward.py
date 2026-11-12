@@ -32,6 +32,7 @@ from isaaclab.utils.math import quat_apply
 
 from .observations import stair_env_mask, stairs_terrain_height, tip_offsets
 from .phase_estimator import PhaseEstimator
+from .sensor_error import ObsErrorState
 
 # ===== 다리 =====
 # 라이다 쪽이 앞(+x)이다 (scripts/postprocess_urdf.py에서 몸통을 180° 돌림)
@@ -205,6 +206,9 @@ class StairTracker:
         self.front_feet = FRONT
         error_cfg = getattr(env.cfg, "phase_error", None)
         self.estimator = PhaseEstimator(self, error_cfg) if error_cfg is not None else None
+        # student 관측에만 들어가는 센서 오차. obs_error 설정이 있는 task만 만든다 (지금은 평가 스크립트가 넣는다)
+        obs_error_cfg = getattr(env.cfg, "obs_error", None)
+        self.obs_error = ObsErrorState(env, obs_error_cfg) if obs_error_cfg is not None else None
 
     # ----- 지금 단계 -----
     def phase_and_level(self, move=None):
@@ -435,6 +439,8 @@ class StairTracker:
         self.settle_score[env_ids] = 0.0
         if self.estimator is not None:
             self.estimator.reset(env_ids, moves)
+        if self.obs_error is not None:
+            self.obs_error.reset(env_ids)
 
 
 def get_tracker(env) -> StairTracker:

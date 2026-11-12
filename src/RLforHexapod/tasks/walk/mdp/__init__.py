@@ -4,5 +4,6 @@ from .rewards import *
 from .terminations import *
 from .events import *
 from .observations import *
+from .sensor_error import *
 from .phase_estimator import *
 from .stair_reward import *

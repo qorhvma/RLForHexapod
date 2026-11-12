@@ -43,6 +43,11 @@ class PhaseErrorCfg:
     contact_confirm: float = 0.0
     # 전진 단계가 안 끝났는데 다음 옮기기(마지막 전진이면 정지) 단계가 이미 끝났으면 두 칸 진행한다
     catch_up: bool = False
+    # 같은 센서 값이 student 관측에도 들어가게 한다 (sensor_error.py): x 오차 → 높이맵 위치, 관절각 편향 → joint_pos,
+    # 접촉 오판 → feet_contact. 높이 편향·지연은 단계 계산에만 쓰는 값이라 공유하지 않는다
+    share_obs: bool = False
+    # 높이맵을 지도에서 잘라 쓰면 x 오차가 높이맵에도 들어간다. 매 프레임 스캔으로 몸통 기준으로 만들면 거의 안 들어간다
+    map_shares_x: bool = True
 
 
 class PhaseEstimator:
@@ -76,6 +81,15 @@ class PhaseEstimator:
         self.pos_noise = torch.zeros(n, 2, device=device)                    # (x, z) std [m]
         self.contact_flip = torch.zeros(n, device=device)                    # 확률
         self.delay_steps = torch.zeros(n, dtype=torch.long, device=device)
+        # 이번 step에 뽑은 값. student 관측이 같은 값을 읽는다 (share_obs)
+        self.pos_error = torch.zeros(n, 2, device=device)                    # (x, z) 편향 + 노이즈 [m]
+        self.flips = torch.zeros(n, len(foot_names), dtype=torch.bool, device=device)
+        # 관절각 편향을 asset 관절 순서로 옮길 번호. 관절 이름은 L{다리}_{coxa|femur|tibia}, 바디는 coxa / coxa_{다리}
+        joint_names = []
+        for name in chain_names:
+            part, _, leg = name.partition("_")
+            joint_names.append(f"L{leg or '1'}_{part}")
+        self.chain_joint_ids, _ = self.asset.find_joints(joint_names, preserve_order=True)
         self.configure(cfg)
 
     def configure(self, cfg: PhaseErrorCfg):
@@ -86,6 +100,12 @@ class PhaseEstimator:
         self.history = self.move.unsqueeze(1).repeat(1, self.max_delay_steps + 1)
         self.delay_steps = self.delay_steps.clamp(max=self.max_delay_steps)
         self.catch_ups = torch.zeros_like(self.catch_ups)
+
+    def joint_bias_by_joint(self) -> torch.Tensor:
+        """관절각 편향을 asset 관절 순서로 (N, 관절 수). joint_pos 관측에 더한다."""
+        out = torch.zeros(self.n, self.asset.num_joints, device=self.device)
+        out[:, self.chain_joint_ids] = self.joint_bias.reshape(self.n, -1)
+        return out
 
     @property
     def delayed_move(self) -> torch.Tensor:
@@ -124,6 +144,9 @@ class PhaseEstimator:
             self.delay_steps[env_ids] = torch.randint(self.max_delay_steps + 1, (count,), device=self.device)
         else:
             self.delay_steps[env_ids] = self.max_delay_steps
+        # 다음 update 전에 계산되는 첫 관측이 새 편향을 쓰게 한다
+        self.pos_error[env_ids] = self.pos_bias[env_ids]
+        self.flips[env_ids] = False
 
     def _tip_error_from_joints(self, tips: torch.Tensor) -> torch.Tensor:
         """관절각 편향만큼 발끝 계산이 틀어지는 양 (N, 6, 3). 각이 작으므로 축 × 팔 길이로 근사한다."""
@@ -140,6 +163,7 @@ class PhaseEstimator:
         """참값 측정에 오차를 더해 단계를 진행시킨다. truth: stair_reward.PhaseMeasurement."""
         cfg = self.cfg
         pos_error = self.pos_bias + torch.randn(self.n, 2, device=self.device) * self.pos_noise
+        self.pos_error = pos_error
         error_x, error_z = pos_error.unbind(dim=1)
 
         tips = truth.tips
@@ -149,6 +173,7 @@ class PhaseEstimator:
 
         # 접촉은 참값 tracker와 같은 값에 같은 오판을 넣는다. 오판은 발끝 스위치에도 똑같이 들어간다
         flips = torch.rand(truth.in_contact.shape, device=self.device) < self.contact_flip.unsqueeze(1)
+        self.flips = flips
         contact = truth.in_contact ^ flips
         contact_ground = None
         if cfg.by_contact:

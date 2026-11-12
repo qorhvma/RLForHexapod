@@ -19,6 +19,10 @@ teacher와 student를 같은 조건으로 비교한다.
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-PhaseAux --checkpoint <student.pt>
 
 추정 단계를 보는 student(Hexapod-Stair-Student-A-Phase)는 단계 계산의 오차를 넣어 잴 수 있다.
+x 위치·관절각 편향·접촉 오판은 기본으로 student 관측(높이맵 위치, joint_pos, feet_contact)에도 같은 값이 들어간다
+(실물에서 같은 센서 값을 쓰므로). --no-share_obs면 단계 계산에만, --no-map_shares_x면 높이맵은 밀지 않는다.
+높이맵 기울기·높이·주기·구멍, IMU 기울기, 관절·자이로 노이즈는 관측에만 들어간다 (--obs_*, sweep 아래쪽 줄).
+추정 단계를 안 보는 student(A, A-PhaseAux)도 --phase_sweep을 돌릴 수 있다. 영향이 없는 줄은 건너뛴다.
 --phase_sweep은 오차별로 차례대로 재서 표로 보고한다. 설정마다 첫 에피소드 전체를 돌리므로 --num_envs 1024 정도를 권한다.
 
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --num_envs 1024
@@ -36,6 +40,7 @@ sweep의 각 줄 아래에 뒤처진 시간이 어느 추정 단계에서 생겼
 
 import argparse
 import contextlib
+import dataclasses
 import importlib.metadata
 import math
 import sys
@@ -67,6 +72,26 @@ PHASE_SWEEP = [
     ("전체 (예상 수준)", {
         "pos_bias": 0.02, "pos_noise": 0.005, "height_bias": 0.01, "height_noise": 0.003,
         "joint_bias": math.radians(2.0), "contact_flip": 0.02, "delay": 0.04,
+    }),
+    # 관측에만 들어가는 오차 (ObsErrorCfg 단위: rad, m, 초, 확률, rad/s)
+    ("높이맵 기울기 0.5도", {"map_tilt": math.radians(0.5)}),
+    ("높이맵 기울기 1도", {"map_tilt": math.radians(1.0)}),
+    ("높이맵 기울기 2도", {"map_tilt": math.radians(2.0)}),
+    ("IMU 기울기 0.5도", {"imu_tilt": math.radians(0.5)}),
+    ("IMU 기울기 1도", {"imu_tilt": math.radians(1.0)}),
+    ("높이맵 높이 1cm", {"map_z_bias": 0.01}),
+    ("높이맵 높이 2cm", {"map_z_bias": 0.02}),
+    ("높이맵 주기 50ms", {"map_period": 0.05}),
+    ("높이맵 주기 100ms", {"map_period": 0.1}),
+    ("높이맵 구멍 5%", {"map_dropout": 0.05}),
+    ("높이맵 구멍 20%", {"map_dropout": 0.2}),
+    ("관절 노이즈 0.5도", {"joint_noise": math.radians(0.5)}),
+    ("자이로 노이즈 0.05", {"gyro_noise": 0.05}),
+    ("전체 + 관측 오차", {
+        "pos_bias": 0.02, "pos_noise": 0.005, "height_bias": 0.01, "height_noise": 0.003,
+        "joint_bias": math.radians(2.0), "contact_flip": 0.02, "delay": 0.04,
+        "map_tilt": math.radians(1.0), "imu_tilt": math.radians(0.5), "map_z_bias": 0.01, "map_period": 0.1,
+        "map_dropout": 0.05, "joint_noise": math.radians(0.5), "gyro_noise": 0.05,
     }),
 ]
 
@@ -291,15 +316,28 @@ def phase_shares(counts):
     return (counts / counts.sum().clamp_min(1.0)).tolist()
 
 
-def run_phase_sweep(env, policy, tracker, is_stair, make_error_cfg):
-    """PHASE_SWEEP의 오차마다 첫 에피소드를 돌려 결과를 한 줄씩 출력한다. 정책과 env는 재사용한다."""
+# 단계 추정에만 쓰는 오차. 추정 단계를 관측으로 받지 않는 student에는 영향이 없다
+ESTIMATE_ONLY = {"height_bias", "height_noise", "delay"}
+# 관측과 공유하는 오차 (share_obs일 때 student 관측에도 들어간다)
+SHARED = {"pos_bias", "pos_noise", "joint_bias", "contact_flip"}
+
+
+def run_phase_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate):
+    """PHASE_SWEEP의 오차마다 첫 에피소드를 돌려 결과를 한 줄씩 출력한다. 정책과 env는 재사용한다.
+    추정 단계를 관측으로 받지 않는 student는 영향이 없는 줄을 건너뛰고, 단계 일치 칸을 비운다."""
     base_env = env.unwrapped
-    print("\n===== 단계 추정 오차 시험 =====")
+    print("\n===== 단계 추정·관측 오차 시험 =====")
     print("오차 | 꼭대기 도달 | 추정 단계 일치 / 앞섬 / 뒤처짐 | 평균 단계 | 종료 이유")
     for name, error in PHASE_SWEEP:
+        phase_cfg, obs_cfg = make_error_cfgs(**error)
+        if not observes_estimate and error:
+            relevant = set(error) - ESTIMATE_ONLY - (set() if phase_cfg.share_obs else SHARED)
+            if not relevant:
+                continue
         # 이전 평가에서 만든 상태는 inference tensor라서 리셋도 inference_mode 안에서 해야 한다
         with torch.inference_mode():
-            tracker.estimator.configure(make_error_cfg(**error))
+            tracker.estimator.configure(phase_cfg)
+            tracker.obs_error.configure(obs_cfg)
             env.reset()  # 여기서 새 오차의 편향을 뽑는다
             policy.reset(torch.ones(base_env.num_envs, dtype=torch.bool, device=base_env.device))
         on_step, counts, behind_at = phase_meter(tracker, is_stair)
@@ -316,12 +354,15 @@ def run_phase_sweep(env, policy, tracker, is_stair, make_error_cfg):
         everyone = torch.ones_like(stair_data["start"], dtype=torch.bool)
         result = summarize(stair_data, everyone, tracker.final_advance, tracker.done_move, base_env.step_dt)
         same, ahead, behind = phase_shares(counts)
+        agreement = f"{same:.1%} / {ahead:.1%} / {behind:.1%}" if observes_estimate else "-"
         reasons = ", ".join(f"{k} {v:.1%}" for k, v in result["reasons"].items() if v > 0)
         print(
             f"{name} | {result['reached_top']:.1%} (±{result['margin']:.1%}) | "
-            f"{same:.1%} / {ahead:.1%} / {behind:.1%} | {result['mean_move']:.2f} | {reasons}",
+            f"{agreement} | {result['mean_move']:.2f} | {reasons}",
             flush=True,
         )
+        if not observes_estimate:
+            continue
         # 뒤처진 시간이 어느 추정 단계에서 생겼는지 (멈춘 위치). 건너뛰기는 그 오차에서 일어난 횟수
         details = []
         if behind_at.sum() > 0:
@@ -346,7 +387,7 @@ def main():
     from isaaclab_tasks.utils import resolve_task_config, setup_preset_cli
 
     import RLforHexapod.tasks  # noqa: F401
-    from RLforHexapod.tasks.walk.mdp import PhaseErrorCfg, stair_env_mask
+    from RLforHexapod.tasks.walk.mdp import ObsErrorCfg, PhaseErrorCfg, stair_env_mask
 
     parser = argparse.ArgumentParser(description="저장된 정책의 계단 오르기 평가")
     parser.add_argument("--task", required=True, help="Hexapod-Stair 또는 Hexapod-Stair-Student-*")
@@ -378,6 +419,21 @@ def main():
         "--phase_catch_up", action=argparse.BooleanOptionalAction, default=None,
         help="전진 단계에서 다음 옮기기 단계가 이미 끝났으면 건너뛴다. 기본은 task 설정",
     )
+    parser.add_argument(
+        "--share_obs", action=argparse.BooleanOptionalAction, default=True,
+        help="x 위치·관절각 편향·접촉 오판을 단계 추정과 같은 값으로 student 관측(높이맵, joint_pos, feet_contact)에도 넣는다",
+    )
+    parser.add_argument(
+        "--map_shares_x", action=argparse.BooleanOptionalAction, default=True,
+        help="x 위치 오차만큼 높이맵을 민다 (지도에서 잘라 쓰는 경우). 매 프레임 스캔 높이맵이면 --no-map_shares_x",
+    )
+    parser.add_argument("--obs_map_tilt", type=float, default=0.0, help="높이맵 기울기 (라이다 장착 각도) [도]")
+    parser.add_argument("--obs_imu_tilt", type=float, default=0.0, help="중력 방향 오차 (높이맵과 projected_gravity) [도]")
+    parser.add_argument("--obs_map_z", type=float, default=0.0, help="높이맵 높이 편향 [cm]")
+    parser.add_argument("--obs_map_period", type=float, default=0.0, help="높이맵 갱신 주기 [ms]")
+    parser.add_argument("--obs_map_dropout", type=float, default=0.0, help="높이맵 칸이 직전 값으로 남을 확률 [%%]")
+    parser.add_argument("--obs_joint_noise", type=float, default=0.0, help="관절각 노이즈 std [도]")
+    parser.add_argument("--obs_gyro_noise", type=float, default=0.0, help="각속도 노이즈 std [rad/s]")
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
     sys.argv = [sys.argv[0]] + remaining
@@ -385,19 +441,21 @@ def main():
     env_cfg, agent_cfg = resolve_task_config(args.task, "rsl_rl_cfg_entry_point")
 
     judge_options = (args.phase_judge, args.phase_contact_window, args.phase_contact_confirm, args.phase_catch_up)
-    wants_phase_error = args.phase_sweep or any(o is not None for o in judge_options) or any(
-        (args.phase_pos_bias, args.phase_pos_noise, args.phase_height_bias, args.phase_height_noise,
-         args.phase_joint_bias, args.phase_contact_flip, args.phase_delay)
-    )
-    if wants_phase_error and not hasattr(env_cfg, "phase_error"):
-        parser.error(f"{args.task}는 추정 단계를 쓰지 않습니다. Hexapod-Stair-Student-A-Phase를 쓰세요.")
-    if args.phase_sweep and args.teacher:
-        parser.error("--phase_sweep은 student 평가용입니다. teacher는 추정 단계를 보지 않습니다.")
+    phase_values = (args.phase_pos_bias, args.phase_pos_noise, args.phase_height_bias, args.phase_height_noise,
+                    args.phase_joint_bias, args.phase_contact_flip, args.phase_delay)
+    obs_values = (args.obs_map_tilt, args.obs_imu_tilt, args.obs_map_z, args.obs_map_period, args.obs_map_dropout,
+                  args.obs_joint_noise, args.obs_gyro_noise)
+    wants_errors = args.phase_sweep or any(o is not None for o in judge_options) or any(phase_values + obs_values)
+    if wants_errors and (args.teacher or not hasattr(env_cfg.observations, "student")):
+        parser.error("오차 평가는 student용입니다. teacher는 참값 관측을 봅니다.")
+    # 추정 단계를 관측으로 받는 task (A-Phase, A-PhaseNoise). 다른 student는 공유 오차와 관측 오차만 의미가 있다
+    observes_estimate = hasattr(env_cfg, "phase_error")
 
     # 평가는 오차를 지정한 크기 그대로 쓴다. 판정 방식(접촉 범위, 확인 시간, 건너뛰기)은 task 설정을 따른다
+    # 추정 단계를 안 보는 task도 공유 오차(x, 관절, 접촉)를 뽑으려고 추정기를 만든다
     phase_settings = {}
-    if hasattr(env_cfg, "phase_error"):
-        task_error = env_cfg.phase_error
+    if observes_estimate or wants_errors:
+        task_error = env_cfg.phase_error if observes_estimate else PhaseErrorCfg()
 
         def pick(value, default, scale=1.0):
             return default if value is None else value * scale
@@ -407,6 +465,8 @@ def main():
             "contact_window": pick(args.phase_contact_window, task_error.contact_window, 0.01),
             "contact_confirm": pick(args.phase_contact_confirm, task_error.contact_confirm, 0.001),
             "catch_up": pick(args.phase_catch_up, task_error.catch_up),
+            "share_obs": args.share_obs,
+            "map_shares_x": args.map_shares_x,
         }
         env_cfg.phase_error = PhaseErrorCfg(
             pos_bias=args.phase_pos_bias / 100.0,
@@ -418,9 +478,23 @@ def main():
             delay=args.phase_delay / 1000.0,
             **phase_settings,
         )
+        env_cfg.obs_error = ObsErrorCfg(
+            map_tilt=math.radians(args.obs_map_tilt),
+            imu_tilt=math.radians(args.obs_imu_tilt),
+            map_z_bias=args.obs_map_z / 100.0,
+            map_period=args.obs_map_period / 1000.0,
+            map_dropout=args.obs_map_dropout / 100.0,
+            joint_noise=math.radians(args.obs_joint_noise),
+            gyro_noise=args.obs_gyro_noise,
+        )
 
-    def make_error_cfg(**error):
-        return PhaseErrorCfg(**error, **phase_settings)
+    phase_fields = {f.name for f in dataclasses.fields(PhaseErrorCfg)}
+
+    def make_error_cfgs(**error):
+        """sweep 한 줄의 오차를 단계 추정기 설정과 관측 오차 설정으로 나눈다."""
+        phase = {k: v for k, v in error.items() if k in phase_fields}
+        obs = {k: v for k, v in error.items() if k not in phase_fields}
+        return PhaseErrorCfg(**phase, **phase_settings), ObsErrorCfg(**obs)
 
     with launch_simulation(env_cfg, args), contextlib.ExitStack() as cleanup:
         agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
@@ -447,18 +521,22 @@ def main():
         is_walk = ~is_stair
         if phase_settings:
             s = phase_settings
-            judge = "높이 3cm"
-            if s["by_contact"]:
-                judge += f" 또는 (스위치 + 높이 {s['contact_window'] * 100:.1f}cm, {s['contact_confirm'] * 1000:.0f}ms 유지)"
-            print(f"[INFO] 딛고 있음 판정: {judge} | 전진 건너뛰기: {'켬' if s['catch_up'] else '끔'}")
+            if observes_estimate:
+                judge = "높이 3cm"
+                if s["by_contact"]:
+                    judge += f" 또는 (스위치 + 높이 {s['contact_window'] * 100:.1f}cm, {s['contact_confirm'] * 1000:.0f}ms 유지)"
+                print(f"[INFO] 딛고 있음 판정: {judge} | 전진 건너뛰기: {'켬' if s['catch_up'] else '끔'}")
+            share = "켬" if s["share_obs"] else "끔"
+            map_x = "켬" if s["share_obs"] and s["map_shares_x"] else "끔"
+            print(f"[INFO] x·관절·접촉 오차를 student 관측에도: {share} (높이맵 x 이동: {map_x})")
 
         if args.phase_sweep:
-            run_phase_sweep(env, policy, tracker, is_stair, make_error_cfg)
+            run_phase_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate)
             return
 
         on_step, walk_totals, walk_steps = walk_meter(base_env, is_walk) if is_walk.any() else (None, None, None)
         phase_counts = behind_at = None
-        if tracker.estimator is not None and not is_walk.any():
+        if observes_estimate and not is_walk.any():
             on_step, phase_counts, behind_at = phase_meter(tracker, is_stair)
         obs = env.get_observations()
         aux_meter = None

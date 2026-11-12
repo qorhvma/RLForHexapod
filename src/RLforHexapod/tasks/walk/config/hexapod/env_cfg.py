@@ -332,14 +332,15 @@ class StudentAObservationsCfg(StairsObservationsCfg):
 
     @configclass
     class StudentCfg(ObsGroup):
+        # student_* 함수는 센서 오차 설정(평가용, mdp/sensor_error.py)이 없으면 원래 관측과 같다
         # 실제 관절각 (엔코더가 있다고 가정)
-        joint_pos = ObsTerm(func=mdp.joint_pos_rel)
+        joint_pos = ObsTerm(func=mdp.student_joint_pos)
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
         # L2 내장 IMU로 측정 또는 계산
-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel)
-        projected_gravity = ObsTerm(func=mdp.projected_gravity)
+        base_ang_vel = ObsTerm(func=mdp.student_base_ang_vel)
+        projected_gravity = ObsTerm(func=mdp.student_projected_gravity)
         last_action = ObsTerm(func=mdp.last_action)
-        feet_contact = ObsTerm(func=mdp.feet_contact, params={
+        feet_contact = ObsTerm(func=mdp.student_feet_contact, params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=mdp.FOOT_BODIES, preserve_order=True)})
         # 앞쪽 x 2cm 간격, 옆쪽 y 10cm 간격, 41 x 5 = 205칸
         height_map = ObsTerm(func=mdp.stairs_height_map, noise=GaussianNoiseCfg(std=0.01), params={
