@@ -600,8 +600,7 @@ def main():
         env = gym.make(args.task, cfg=env_cfg)
         cleanup.callback(env.close)
         env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)  # 여기서 첫 리셋이 일어난다
-        # 센서 오차와 판정 설정을 env를 만든 뒤 새 객체로 직접 넣는다.
-        # launch_simulation 앞에서 env_cfg에 넣은 설정 객체는 기본값으로 덮인다 (학습이 오차 없이 진행됐던 원인)
+        # 센서 오차와 판정 설정을 env를 만든 뒤 직접 넣고 다시 리셋한다 (오차 시험과 같은 방식)
         if observes_estimate:
             env.unwrapped.stair_tracker.estimator.configure(
                 PhaseEstimatorCfg(delay=estimator_delay, **estimator_settings))

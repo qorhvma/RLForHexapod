@@ -167,30 +167,16 @@ def main():
         device = base_env.device
         tracker = base_env.stair_tracker
         n = base_env.num_envs
-        # 센서 오차를 env에 직접 넣는다. env 설정만 바꾸면 복사 과정에서 빠져 오차 없이 학습된 적이 있다
-        print(f"[INFO] env가 만든 센서 오차: {nonzero_fields(tracker.sensors.cfg)}")
+        # 센서 오차와 판정 설정을 env에 직접 넣고 다시 리셋한다 (평가 스크립트의 오차 시험과 같은 방식)
         sensors = tracker.sensors
-
-        def sampled(where):
-            print(f"[INFO] 뽑힌 오차 ({where}): 라이다 x 편향 |평균| {sensors.x_bias.abs().mean().item() * 100:.2f}cm, "
-                  f"엔코더 편향 |평균| {math.degrees(sensors.encoder_bias.abs().mean().item()):.2f}도 "
-                  f"(sensor_model id {id(sensors)}, env.sensor_model id {id(getattr(base_env, 'sensor_model', None))})")
-
-        sampled("env 생성 직후")
-        # 새 객체로 만든다. launch_simulation 앞에서 env_cfg에 넣은 설정 객체는 기본값으로 덮였다 (오차 없이 학습된 원인)
-        print(f"[INFO] 학습 오차 최댓값: {errors}")
-        sensor_cfg = SensorErrorCfg(**errors, randomize=True)
         tracker.estimator.configure(PhaseEstimatorCfg())
-        sensors.configure(sensor_cfg)
-        if any(v > 0.0 for v in errors.values()) and not set(nonzero_fields(sensors.cfg)) & set(errors):
-            raise RuntimeError(f"센서 오차 설정이 비었습니다: {nonzero_fields(sensors.cfg)}")
-        print(f"[INFO] 학습 센서 오차 (에피소드마다 0 ~ 이 값): {nonzero_fields(sensors.cfg)}")
+        sensors.configure(SensorErrorCfg(**errors, randomize=True))
         env.reset()  # 여기서 새 설정으로 오차를 뽑는다
-        sampled("env.reset 뒤")
-        if sensor_cfg.lidar_x_bias > 0.0 and sensors.x_bias.abs().max().item() == 0.0:
-            print("[WARN] env.reset이 센서 오차를 다시 뽑지 않았습니다. 직접 뽑습니다.")
-            sensors.reset(torch.arange(n, device=device))
-            sampled("직접 뽑은 뒤")
+        print(f"[INFO] 학습 센서 오차 (에피소드마다 0 ~ 이 값): {nonzero_fields(sensors.cfg)}")
+        print(f"[INFO] 뽑힌 오차: 라이다 x 편향 |평균| {sensors.x_bias.abs().mean().item() * 100:.2f}cm, "
+              f"엔코더 편향 |평균| {math.degrees(sensors.encoder_bias.abs().mean().item()):.2f}도")
+        if args.error_scale == 0.0:
+            print("[INFO] --error_scale 0: 센서 오차 없이 학습합니다 (진단용)")
 
         runner = create_rsl_rl_runner(env, agent_cfg)
         print(f"[INFO] A-Phase 정책: {args.policy}")
