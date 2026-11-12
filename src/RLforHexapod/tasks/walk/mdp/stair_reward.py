@@ -659,6 +659,22 @@ def stair_phase_obs(env) -> torch.Tensor:
     return tracker.phase_one_hot(tracker.move)
 
 
+def feet_below_body(env) -> torch.Tensor:
+    """몸통 기준 발끝 높이 (N, 6), 중력 방향 [m]. 실물에서는 IMU 자세 + 관절각 FK로 계산한다.
+    엔코더 오차(발끝 위치)와 IMU 기울기 오차(sensor_model.py)가 들어간다. 단계 추정 신경망만 쓴다.
+    마지막 단의 접기 전진·뒷발은 몸통 x가 꼭대기 정지와 거의 같다 (목표 1.18~1.30m vs 1.2m).
+    둘의 차이는 뒷발이 아직 아래 단(약 16cm 낮음)에 있는지뿐이라 그것을 직접 보여 준다."""
+    tracker = get_tracker(env)
+    sensors = tracker.sensors
+    tips = tracker.tips()
+    if sensors.has_encoder_error and tracker.estimator is not None:
+        estimator = tracker.estimator
+        chain_error = sensors.read_encoder_error()[:, estimator.chain_joint_ids].reshape(env.num_envs, -1, 3)
+        tips = tips + estimator._tip_error_from_joints(tips, chain_error)
+    base, _ = tracker.body_state()
+    return tips[..., 2] - base[:, 2:3] + sensors.imu_tilt_height_error(tips)
+
+
 def stair_phase_est_obs(env) -> torch.Tensor:
     """로봇 센서로 계산한다고 가정한 추정 단계 one-hot (N, PHASE_OBS_SIZE). 오차가 0이면 stair_phase_obs와 같다."""
     tracker = get_tracker(env)

@@ -5,6 +5,7 @@
 A-Phase는 순간 오차(지연, 접촉 뒤집힘)에는 fine-tune 없이도 강하다.
 
     입력: A-Phase student 관측에서 단계 칸(phase)을 뺀 것 = Student-A 관측 (높이맵, 관절, IMU, 접촉, 직전 행동)
+          + extra_groups의 관측 그룹 (기본 phase_net = 라이다로 잰 몸통 x, 몸통 기준 발끝 높이)
     구조: 입력 정규화 → GRU → Linear → 단계 logits (7, stair_phase_obs와 같은 순서)
     학습: scripts/train_phase_net.py (참값 단계에 대한 cross-entropy)
     평가: scripts/eval_stairs.py --phase_net <model.pt>
@@ -17,6 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 PHASE_TERM = "phase"  # A-Phase student 관측에서 단계 칸의 이름 (env_cfg.StudentAPhaseObservationsCfg)
+EXTRA_GROUP = "phase_net"  # 신경망만 보는 추가 관측 그룹 (env_cfg.StudentAPhaseObservationsCfg.PhaseNetCfg)
 
 
 class RunningNorm(nn.Module):
@@ -47,11 +49,16 @@ class RunningNorm(nn.Module):
 class PhaseNet(nn.Module):
     """한 step씩 돌리는 GRU 단계 분류기."""
 
-    def __init__(self, input_dim: int, hidden_dim: int = 128, num_classes: int = 7, input_mode: str = "onehot"):
+    def __init__(
+        self, input_dim: int, hidden_dim: int = 128, num_classes: int = 7, input_mode: str = "onehot",
+        extra_groups: tuple[str, ...] | list[str] = (),
+    ):
         super().__init__()
         assert input_mode in ("onehot", "probs"), input_mode
+        self.extra_groups = list(extra_groups)
         self.config = {
             "input_dim": input_dim, "hidden_dim": hidden_dim, "num_classes": num_classes, "input_mode": input_mode,
+            "extra_groups": self.extra_groups,
         }
         self.input_mode = input_mode
         self.norm = RunningNorm(input_dim)
@@ -99,8 +106,13 @@ def term_slice(observation_manager, group: str = "student", term: str = PHASE_TE
 
 
 def without(x: torch.Tensor, cut: slice) -> torch.Tensor:
-    """관측에서 단계 칸을 뺀다 (신경망 입력)."""
+    """관측에서 단계 칸을 뺀다."""
     return torch.cat([x[:, : cut.start], x[:, cut.stop :]], dim=1)
+
+
+def net_input(obs, cut: slice, extra_groups, group: str = "student") -> torch.Tensor:
+    """신경망 입력 = student 관측에서 단계 칸을 뺀 것 + 추가 관측 그룹들."""
+    return torch.cat([without(obs[group], cut)] + [obs[g] for g in extra_groups], dim=1)
 
 
 class PhaseNetPolicy:
@@ -117,7 +129,7 @@ class PhaseNetPolicy:
 
     def __call__(self, obs):
         observed = obs[self.group]
-        self.last_input = without(observed, self.cut)
+        self.last_input = net_input(obs, self.cut, self.net.extra_groups, self.group)
         self.last_logits, self.hidden = self.net.step(self.last_input, self.hidden)
         phase = self.net.to_phase_input(self.last_logits)
         if self.forced is not None:

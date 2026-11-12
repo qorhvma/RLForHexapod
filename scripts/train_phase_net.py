@@ -20,7 +20,13 @@ A-Phase student(참값 단계로 증류한 체크포인트)가 계단을 오르�
 단계별 가중치 (--class_weight_power): 단계마다 시간 비중이 크게 다르다 (꼭대기에 서 있는 정지가 약 50%).
 가중치가 없으면 애매할 때 정지로 답하는 쪽으로 학습돼, 마지막 단의 접기 전진·뒷발에서 정지를 일찍 말한다.
 그래서 손실에서 단계 c의 가중치를 (시간 비중)^(-power)로 준다. 1 = 시간 비중에 반비례 (단계마다 손실 몫이 같음),
-0 = 가중치 없음. 시간 비중은 정답 단계를 iteration마다 세어 지수 평균한다. 가중치는 WEIGHT_RANGE로 자른다.
+0 = 가중치 없음 (기본). 시간 비중은 정답 단계를 iteration마다 세어 지수 평균한다. 가중치는 WEIGHT_RANGE로 자른다.
+1로 학습해 보니 꼭대기 도달이 58.9% → 47.6%로 나빠졌다: 정지를 일찍 말하는 대신 꼭대기에서 접기 전진·뒷발이라고 말했다.
+
+추가 입력 (phase_net 관측 그룹, 기본으로 넣음, --no_extra로 뺌): 마지막 단은 앞쪽 높이맵이 평평해서 꼭대기와 같아 보인다.
+- 라이다로 잰 몸통 x (mdp.lidar_body_x): 몇 번째 단 위인지. 라이다 x 오차가 높이맵 밀림과 같은 값으로 들어간다
+- 몸통 기준 발끝 높이 (mdp.feet_below_body, IMU + 관절각 FK): 뒷발이 아직 아래 단에 있는지.
+  마지막 단의 접기 전진·뒷발은 몸통 x가 꼭대기 정지와 거의 같아서 이것이 주된 구분 정보다
 
 결과는 logs/phase_net/<시각>/model_<iter>.pt. TensorBoard:
 - Phase/accuracy_net: 신경망 출력으로 움직인 env에서의 정답률
@@ -76,7 +82,13 @@ def main():
     from isaaclab_tasks.utils import resolve_task_config, setup_preset_cli
 
     import RLforHexapod.tasks  # noqa: F401
-    from RLforHexapod.tasks.walk.config.hexapod.agents.phase_net import PhaseNet, PhaseNetPolicy, term_slice
+    from RLforHexapod.tasks.walk.config.hexapod.agents.phase_net import (
+        EXTRA_GROUP,
+        PhaseNet,
+        PhaseNetPolicy,
+        net_input,
+        term_slice,
+    )
     from RLforHexapod.tasks.walk.mdp import PhaseEstimatorCfg, SensorErrorCfg
 
     parser = argparse.ArgumentParser(description="단계 추정 신경망 학습")
@@ -95,8 +107,10 @@ def main():
                         help="A-Phase에 넣는 형태. onehot = 가장 그럴듯한 단계 (A-Phase가 학습한 형태)")
     parser.add_argument("--dagger_iters", type=int, default=300, help="참값으로 움직이는 비율을 1 → 0으로 줄이는 iteration 수")
     parser.add_argument("--error_scale", type=float, default=1.0, help="학습용 센서 오차 크기 배율. 0 = 오차 없음")
-    parser.add_argument("--class_weight_power", type=float, default=1.0,
-                        help="단계별 손실 가중치 = (시간 비중)^(-power). 1 = 반비례, 0 = 가중치 없음")
+    parser.add_argument("--class_weight_power", type=float, default=0.0,
+                        help="단계별 손실 가중치 = (시간 비중)^(-power). 1 = 반비례, 0 = 가중치 없음 (1은 역효과였음)")
+    parser.add_argument("--no_extra", action="store_true",
+                        help="phase_net 관측 그룹(몸통 x, 발끝 높이)을 입력에 넣지 않는다 (Student-A 관측만)")
     parser.add_argument("--save_interval", type=int, default=100)
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
@@ -132,7 +146,6 @@ def main():
 
         cut = term_slice(base_env.observation_manager)
         obs = env.get_observations()
-        input_dim = obs["student"].shape[1] - (cut.stop - cut.start)
         num_classes = cut.stop - cut.start
 
         start_iter = 0
@@ -140,9 +153,17 @@ def main():
             net, saved = PhaseNet.load(args.resume, device)
             start_iter = saved.get("iteration", 0) + 1
             print(f"[INFO] 이어서 학습: {args.resume} (iteration {start_iter}부터)")
+            extra_groups = net.extra_groups
         else:
-            net = PhaseNet(input_dim, args.hidden, num_classes, args.input_mode).to(device)
+            extra_groups = [] if args.no_extra else [EXTRA_GROUP]
+            missing = [g for g in extra_groups if g not in obs.keys()]
+            if missing:
+                parser.error(f"{args.task} 관측에 {missing} 그룹이 없습니다. --no_extra를 쓰거나 A-Phase 계열 task를 쓰세요.")
+        input_dim = net_input(obs, cut, extra_groups).shape[1]
+        if not args.resume:
+            net = PhaseNet(input_dim, args.hidden, num_classes, args.input_mode, extra_groups).to(device)
             saved = {}
+        print(f"[INFO] 신경망 입력: student {obs['student'].shape[1] - num_classes} + {extra_groups} = {input_dim}")
         if net.config["input_dim"] != input_dim or net.config["num_classes"] != num_classes:
             raise ValueError(f"관측 크기가 다릅니다: 신경망 {net.config}, env 입력 {input_dim} / 단계 {num_classes}")
         optimizer = torch.optim.Adam(net.parameters(), lr=args.lr)

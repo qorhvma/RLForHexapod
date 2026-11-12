@@ -389,7 +389,21 @@ class StudentAPhaseObservationsCfg(StudentAObservationsCfg):
         # 실물 센서(Point-LIO, 관절각, 발 접촉)로 계산한다고 가정한 단계 (7). 판정은 phase_estimator, 오차는 sensor_error
         phase = ObsTerm(func=mdp.stair_phase_est_obs)
 
+    @configclass
+    class PhaseNetCfg(ObsGroup):
+        """단계 추정 신경망(agents/phase_net.py)만 보는 추가 입력. A-Phase 정책은 보지 않는다 (체크포인트 호환)."""
+
+        # 라이다로 잰 몸통 x (첫 수직면 기준 + 수직면마다 지난 거리). 라이다 x 오차가 들어간다
+        body_x = ObsTerm(func=mdp.lidar_body_x, params={"stairs": STAIRS})
+        # IMU + 관절각 FK로 계산한 몸통 기준 발끝 높이 (6). 엔코더·IMU 기울기 오차가 들어간다
+        feet_below_body = ObsTerm(func=mdp.feet_below_body)
+
+        def __post_init__(self):
+            self.concatenate_terms = True
+            self.enable_corruption = False
+
     student: StudentCfg = StudentCfg()
+    phase_net: PhaseNetCfg = PhaseNetCfg()
 
 
 @configclass

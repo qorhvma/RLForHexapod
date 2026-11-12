@@ -189,3 +189,15 @@ def feet_contact(env, sensor_cfg: SceneEntityCfg, threshold: float = 1.0) -> tor
     sensor = env.scene.sensors[sensor_cfg.name]
     forces_z = sensor.data.net_normal_forces_w_history.torch[:, :, sensor_cfg.body_ids, 2]
     return (forces_z.max(dim=1).values > threshold).float()
+
+
+def lidar_body_x(env, stairs: StairsGeometryCfg, clip: tuple[float, float] = (-0.3, 0.6)) -> torch.Tensor:
+    """라이다(Point-LIO + 지도의 수직면)로 잰 몸통 x (N, 1 + 단 수). 라이다 x 오차(sensor_model.py)가 들어간다.
+    [첫 수직면 기준 x, 각 수직면 기준 x를 clip으로 자른 값...]. 자른 값은 "그 수직면을 얼마나 지났는지"라서
+    마지막 단(뒷발이 아직 아래)과 꼭대기처럼 높이맵이 같아 보이는 위치를 구분하게 한다.
+    단계 추정 신경망(agents/phase_net.py)만 쓴다."""
+    pose = env.scene["robot"].data.root_pose_w.torch
+    x = pose[:, 0] - env.scene.env_origins[:, 0] + get_sensor_model(env).read_x_error()
+    risers = stairs.x0 + stairs.tread * torch.arange(stairs.num_steps, device=env.device)
+    past = (x.unsqueeze(1) - risers).clamp(*clip)
+    return torch.cat([(x - stairs.x0).unsqueeze(1), past], dim=1)

@@ -186,19 +186,23 @@ class SensorModel:
         level_error: 발마다 (발 밑 단 - 기준 단) 단 수 (N, 6)."""
         self.begin_step()
         out = self.foot_height_error.unsqueeze(1) + self.step_height_error.unsqueeze(1) * level_error
-        if self.cfg.imu_tilt > 0.0:
-            pose = self.asset.data.root_pose_w.torch
-            base = pose[:, :3] - self.env.scene.env_origins
-            forward = torch.zeros_like(base)
-            forward[:, 0] = 1.0
-            forward = quat_apply(pose[:, 3:7], forward)
-            heading = torch.atan2(forward[:, 1], forward[:, 0]).unsqueeze(1)
-            dx, dy = tips[..., 0] - base[:, 0:1], tips[..., 1] - base[:, 1:2]
-            ahead = torch.cos(heading) * dx + torch.sin(heading) * dy
-            left = -torch.sin(heading) * dx + torch.cos(heading) * dy
-            roll, pitch = self.imu_tilt.unbind(dim=1)
-            out = out + pitch.unsqueeze(1) * ahead - roll.unsqueeze(1) * left
-        return out
+        return out + self.imu_tilt_height_error(tips)
+
+    def imu_tilt_height_error(self, tips: torch.Tensor) -> torch.Tensor:
+        """IMU 기울기 오차 때문에 몸통 기준 발끝 높이가 틀어지는 양 (N, 6). pitch × 앞 거리 - roll × 왼쪽 거리."""
+        if self.cfg.imu_tilt <= 0.0:
+            return torch.zeros(tips.shape[:2], device=tips.device)
+        pose = self.asset.data.root_pose_w.torch
+        base = pose[:, :3] - self.env.scene.env_origins
+        forward = torch.zeros_like(base)
+        forward[:, 0] = 1.0
+        forward = quat_apply(pose[:, 3:7], forward)
+        heading = torch.atan2(forward[:, 1], forward[:, 0]).unsqueeze(1)
+        dx, dy = tips[..., 0] - base[:, 0:1], tips[..., 1] - base[:, 1:2]
+        ahead = torch.cos(heading) * dx + torch.sin(heading) * dy
+        left = -torch.sin(heading) * dx + torch.cos(heading) * dy
+        roll, pitch = self.imu_tilt.unbind(dim=1)
+        return pitch.unsqueeze(1) * ahead - roll.unsqueeze(1) * left
 
 
 def get_sensor_model(env) -> SensorModel:
