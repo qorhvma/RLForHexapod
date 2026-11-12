@@ -34,6 +34,12 @@ student는 센서 오차를 넣어 잴 수 있다 (mdp/sensor_model.py). 오차�
 sweep의 각 줄 아래에 뒤처진 시간이 어느 추정 단계에서 생겼는지 나온다.
 
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --error_sweep --phase_judge contact --phase_catch_up
+
+--phase_net을 주면 A-Phase 계열의 단계 입력을 규칙 추정기 대신 단계 추정 신경망(agents/phase_net.py) 출력으로 바꾼다.
+신경망 예측과 참값의 일치/앞섬/뒤처짐, 단계별 정답률, 0.5초 넘게 계속 틀린 비율을 함께 보고한다.
+sweep에서는 단계 계산에만 쓰는 원인(발끝 높이 계산, 계산 지연)을 건너뛴다.
+
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <A_phase.pt> --phase_net <phase_net.pt> --error_sweep --num_envs 1024
 """
 
 import argparse
@@ -313,17 +319,97 @@ class PhaseAuxMeter:
         return step
 
     def report(self):
-        total = self.confusion.sum().clamp_min(1.0)
-        lines = [f"\n단계 예측 (보조 출력): 정답률 {self.confusion.diag().sum() / total:.1%}"]
-        per_label = self.confusion.sum(dim=1)
-        for k, name in enumerate(AUX_PHASE_NAMES):
-            if per_label[k] == 0:
-                continue
-            row = self.confusion[k] / per_label[k]
-            wrong = ", ".join(
-                f"{AUX_PHASE_NAMES[j]} {row[j]:.0%}" for j in range(len(AUX_PHASE_NAMES)) if j != k and row[j] >= 0.01
-            )
-            lines.append(f"  {name}: {row[k]:.1%} (시간 비중 {per_label[k] / total:.0%})" + (f" | 틀린 예측: {wrong}" if wrong else ""))
+        return confusion_report(self.confusion, "단계 예측 (보조 출력)")
+
+
+def confusion_report(confusion, title):
+    """[참값, 예측] 표를 단계별 정답률과 틀린 예측으로 글로 만든다."""
+    total = confusion.sum().clamp_min(1.0)
+    lines = [f"\n{title}: 정답률 {confusion.diag().sum() / total:.1%}"]
+    per_label = confusion.sum(dim=1)
+    for k, name in enumerate(AUX_PHASE_NAMES):
+        if per_label[k] == 0:
+            continue
+        row = confusion[k] / per_label[k]
+        wrong = ", ".join(
+            f"{AUX_PHASE_NAMES[j]} {row[j]:.0%}" for j in range(len(AUX_PHASE_NAMES)) if j != k and row[j] >= 0.01
+        )
+        lines.append(f"  {name}: {row[k]:.1%} (시간 비중 {per_label[k] / total:.0%})" + (f" | 틀린 예측: {wrong}" if wrong else ""))
+    return "\n".join(lines)
+
+
+STUCK_STEPS = 25  # 0.5초. 이보다 오래 계속 틀리면 "굳음"으로 센다
+
+
+class NetPhaseMeter:
+    """단계 추정 신경망(--phase_net)의 예측을 첫 에피소드 동안 참값 단계와 비교한다. PhaseNetPolicy를 감싼다.
+    단계는 단마다 반복되는 7가지(stair_phase_obs)라서, 앞섬/뒤처짐은 한 단 안의 순환 차이로 정한다
+    (-3 ~ +2칸, 정확히 반 바퀴는 뒤처짐). 정지를 미리 예측하면 앞섬, 정지인데 다른 단계로 예측하면 뒤처짐."""
+
+    def __init__(self, policy, tracker, mask):
+        self.policy, self.tracker, self.mask = policy, tracker, mask
+        k, device = len(AUX_PHASE_NAMES), mask.device
+        self.confusion = torch.zeros(k, k, device=device)  # [참값, 예측]
+        self.counts = torch.zeros(3, device=device)  # 같음, 앞섬, 뒤처짐
+        self.behind_at = torch.zeros(k, device=device)  # 뒤처진 step을 예측 단계별로
+        self.streak = torch.zeros(mask.shape[0], dtype=torch.long, device=device)
+        self.longest = torch.zeros_like(self.streak)  # env별 가장 길게 계속 틀린 step 수
+        self.stuck = torch.zeros((), device=device)
+        self.steps = torch.zeros((), device=device)
+        self.label = self.predicted = None
+
+    def __call__(self, obs):
+        # 관측이 만들어진 순간의 참값 (step 전)
+        self.label = self.tracker.phase_one_hot(self.tracker.move).argmax(dim=-1)
+        actions = self.policy(obs)
+        self.predicted = self.policy.last_logits.argmax(dim=-1)
+        return actions
+
+    def reset(self, dones):
+        self.policy.reset(dones)
+
+    def chain(self, on_step):
+        k = len(AUX_PHASE_NAMES)
+        stop = k - 1
+
+        def step(dones, finished):
+            active = self.mask & ~finished
+            label, predicted = self.label, self.predicted
+            index = label[active] * k + predicted[active]
+            self.confusion.view(-1).add_(torch.bincount(index, minlength=self.confusion.numel()).float())
+            difference = (predicted - label + stop // 2) % stop - stop // 2
+            difference = torch.where(predicted == stop, torch.ones_like(difference), difference)
+            difference = torch.where(label == stop, -torch.ones_like(difference), difference)
+            difference = torch.where(predicted == label, torch.zeros_like(difference), difference)
+            d = difference[active]
+            self.counts[0] += (d == 0).sum()
+            self.counts[1] += (d > 0).sum()
+            self.counts[2] += (d < 0).sum()
+            behind = active & (difference < 0)
+            self.behind_at.add_(torch.bincount(predicted[behind], minlength=k).float())
+            wrong = active & (predicted != label)
+            self.streak = torch.where(wrong, self.streak + 1, torch.zeros_like(self.streak))
+            self.longest = torch.maximum(self.longest, self.streak)
+            self.stuck += (self.streak >= STUCK_STEPS).sum()
+            self.steps += active.sum()
+            if on_step is not None:
+                on_step(dones, finished)
+
+        return step
+
+    def stuck_text(self, step_dt):
+        """0.5초 넘게 계속 틀린 step 비율과 env별 최장 연속 틀림."""
+        longest = self.longest[self.mask].float() * step_dt
+        return (
+            f"0.5초+ 연속 틀림 {(self.stuck / self.steps.clamp_min(1)).item():.1%} | "
+            f"최장 연속 틀림 평균 {longest.mean().item():.2f}초, 90% {longest.quantile(0.9).item():.2f}초"
+        )
+
+    def report(self, step_dt):
+        same, ahead, behind = phase_shares(self.counts)
+        lines = [confusion_report(self.confusion, "단계 추정 신경망")]
+        lines.append(f"  일치 {same:.1%}, 앞섬 {ahead:.1%}, 뒤처짐 {behind:.1%}")
+        lines.append("  " + self.stuck_text(step_dt))
         return "\n".join(lines)
 
 
@@ -332,14 +418,15 @@ def phase_shares(counts):
     return (counts / counts.sum().clamp_min(1.0)).tolist()
 
 
-def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate):
+def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate, phase_net=False):
     """ERROR_SWEEP의 오차마다 첫 에피소드를 돌려 결과를 한 줄씩 출력한다. 정책과 env는 재사용한다.
-    추정 단계를 관측으로 받지 않는 student는 영향이 없는 줄을 건너뛰고, 단계 일치 칸을 비운다."""
+    추정 단계를 관측으로 받지 않는 student는 영향이 없는 줄을 건너뛰고, 단계 일치 칸을 비운다.
+    phase_net: policy가 PhaseNetPolicy다. 단계 계산에만 쓰는 원인을 건너뛰고, 일치 칸은 신경망 예측으로 잰다."""
     base_env = env.unwrapped
     print("\n===== 센서 오차 시험 =====")
     print("오차 | 꼭대기 도달 | 추정 단계 일치 / 앞섬 / 뒤처짐 | 평균 단계 | 종료 이유")
     for name, error in ERROR_SWEEP:
-        if not observes_estimate and error and set(error) <= ESTIMATE_ONLY:
+        if (not observes_estimate or phase_net) and error and set(error) <= ESTIMATE_ONLY:
             continue
         estimator_cfg, sensor_cfg = make_error_cfgs(**error)
         # 이전 평가에서 만든 상태는 inference tensor라서 리셋도 inference_mode 안에서 해야 한다
@@ -349,13 +436,18 @@ def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_es
                 tracker.estimator.configure(estimator_cfg)
             env.reset()  # 여기서 새 오차의 편향을 뽑는다
             policy.reset(torch.ones(base_env.num_envs, dtype=torch.bool, device=base_env.device))
-        if not observes_estimate:
-            on_step, counts, behind_at = None, torch.zeros(3), torch.zeros(len(PHASE_NAMES))
+        driver, net_meter = policy, None
+        if phase_net:
+            net_meter = NetPhaseMeter(policy, tracker, is_stair)
+            driver, on_step = net_meter, net_meter.chain(None)
+            counts, behind_at, names = net_meter.counts, net_meter.behind_at, AUX_PHASE_NAMES
+        elif not observes_estimate:
+            on_step, counts, behind_at, names = None, torch.zeros(3), torch.zeros(len(PHASE_NAMES)), PHASE_NAMES
         else:
-            on_step, counts, behind_at = phase_meter(tracker, is_stair)
+            (on_step, counts, behind_at), names = phase_meter(tracker, is_stair), PHASE_NAMES
         data = collect_first_episodes(
             env,
-            policy,
+            driver,
             env.get_observations(),
             tracker,
             base_env.termination_manager,
@@ -380,9 +472,11 @@ def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_es
         if behind_at.sum() > 0:
             shares = (behind_at / behind_at.sum()).tolist()
             details.append("뒤처진 위치: " + ", ".join(
-                f"{n} {s:.0%}" for n, s in zip(PHASE_NAMES, shares, strict=True) if s >= 0.005
+                f"{n} {s:.0%}" for n, s in zip(names, shares, strict=True) if s >= 0.005
             ))
-        if tracker.estimator.cfg.catch_up:
+        if net_meter is not None:
+            details.append(net_meter.stuck_text(base_env.step_dt))
+        elif tracker.estimator.cfg.catch_up:
             details.append(f"건너뛰기 {tracker.estimator.catch_ups.item()}회")
         if details:
             print("    " + " | ".join(details), flush=True)
@@ -434,6 +528,10 @@ def main():
         "--phase_catch_up", action=argparse.BooleanOptionalAction, default=None,
         help="전진 단계에서 다음 옮기기 단계가 이미 끝났으면 건너뛴다. 기본은 task 설정",
     )
+    parser.add_argument(
+        "--phase_net", default=None,
+        help="단계 추정 신경망 (.pt, scripts/train_phase_net.py). A-Phase 계열의 단계 입력을 이 신경망 출력으로 바꾼다",
+    )
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
     sys.argv = [sys.argv[0]] + remaining
@@ -451,6 +549,10 @@ def main():
     observes_estimate = hasattr(env_cfg, "phase_estimator")
     if any(o is not None for o in judge_options) and not observes_estimate:
         parser.error(f"{args.task}는 추정 단계를 쓰지 않습니다. --phase_* 판정 옵션은 A-Phase 계열에만 있습니다.")
+    if args.phase_net is not None and (not observes_estimate or args.teacher):
+        parser.error("--phase_net은 단계 입력을 받는 A-Phase 계열 student에만 쓸 수 있습니다.")
+    if args.phase_net is not None and any(o is not None for o in judge_options):
+        parser.error("--phase_net을 쓰면 규칙 추정기를 쓰지 않으므로 --phase_* 판정 옵션은 의미가 없습니다.")
 
     # 평가는 오차를 지정한 크기 그대로 쓴다 (학습용 무작위 크기는 쓰지 않는다). 판정 방식은 task 설정을 따른다
     estimator_settings = {}
@@ -503,7 +605,15 @@ def main():
         tracker = base_env.stair_tracker
         is_stair = stair_env_mask(base_env)
         is_walk = ~is_stair
-        if observes_estimate:
+        if args.phase_net is not None:
+            from RLforHexapod.tasks.walk.config.hexapod.agents.phase_net import PhaseNet, PhaseNetPolicy, term_slice
+
+            net, _ = PhaseNet.load(args.phase_net, base_env.device)
+            net.eval()
+            policy = PhaseNetPolicy(policy, net, term_slice(base_env.observation_manager), base_env.num_envs,
+                                    base_env.device)
+            print(f"[INFO] 단계 입력: 단계 추정 신경망 {args.phase_net} ({net.config['input_mode']})")
+        elif observes_estimate:
             s = estimator_settings
             judge = "높이 3cm"
             if s["by_contact"]:
@@ -513,15 +623,19 @@ def main():
             print(f"[INFO] 높이맵 방식: {args.map_mode}")
 
         if args.error_sweep:
-            run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate)
+            run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate,
+                            phase_net=args.phase_net is not None)
             return
 
         on_step, walk_totals, walk_steps = walk_meter(base_env, is_walk) if is_walk.any() else (None, None, None)
         phase_counts = behind_at = None
-        if observes_estimate and not is_walk.any():
+        if observes_estimate and not is_walk.any() and args.phase_net is None:
             on_step, phase_counts, behind_at = phase_meter(tracker, is_stair)
         obs = env.get_observations()
-        aux_meter = None
+        aux_meter = net_meter = None
+        if args.phase_net is not None:
+            net_meter = NetPhaseMeter(policy, tracker, is_stair)
+            policy, on_step = net_meter, net_meter.chain(on_step)
         if hasattr(policy, "last_phase_logits") and "phase_label" in obs.keys():
             aux_meter = PhaseAuxMeter(policy, is_stair)
             policy, on_step = aux_meter, aux_meter.chain(on_step)
@@ -548,6 +662,8 @@ def main():
                 ))
         if aux_meter is not None:
             print(aux_meter.report())
+        if net_meter is not None:
+            print(net_meter.report(base_env.step_dt))
         if is_walk.any():
             print(format_walk_report(data, is_walk, walk_totals, walk_steps))
 
