@@ -576,9 +576,8 @@ def main():
             "contact_confirm": pick(args.phase_contact_confirm, task.contact_confirm, 0.001),
             "catch_up": pick(args.phase_catch_up, task.catch_up),
         }
-        env_cfg.phase_estimator = PhaseEstimatorCfg(
-            delay=pick(args.phase_delay, 0.0, 0.001), **estimator_settings
-        )
+        estimator_delay = pick(args.phase_delay, 0.0, 0.001)
+        env_cfg.phase_estimator = PhaseEstimatorCfg(delay=estimator_delay, **estimator_settings)
     if is_student and not args.teacher:
         env_cfg.sensor_error = SensorErrorCfg(**sensor_values, map_mode=args.map_mode)
 
@@ -601,10 +600,14 @@ def main():
         env = gym.make(args.task, cfg=env_cfg)
         cleanup.callback(env.close)
         env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)  # 여기서 첫 리셋이 일어난다
+        # 센서 오차와 판정 설정을 env를 만든 뒤 새 객체로 직접 넣는다.
+        # launch_simulation 앞에서 env_cfg에 넣은 설정 객체는 기본값으로 덮인다 (학습이 오차 없이 진행됐던 원인)
+        if observes_estimate:
+            env.unwrapped.stair_tracker.estimator.configure(
+                PhaseEstimatorCfg(delay=estimator_delay, **estimator_settings))
         if is_student and not args.teacher:
-            # 센서 오차를 env에 직접 넣는다 (env 설정만 바꾸면 복사 과정에서 빠질 수 있다)
-            get_sensor_model(env.unwrapped).configure(env_cfg.sensor_error)
-            env.reset()
+            get_sensor_model(env.unwrapped).configure(SensorErrorCfg(**sensor_values, map_mode=args.map_mode))
+        env.reset()
 
         runner = create_rsl_rl_runner(env, agent_cfg)
         print(f"[INFO] 체크포인트: {args.checkpoint}")

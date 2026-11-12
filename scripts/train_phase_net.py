@@ -177,7 +177,13 @@ def main():
                   f"(sensor_model id {id(sensors)}, env.sensor_model id {id(getattr(base_env, 'sensor_model', None))})")
 
         sampled("env 생성 직후")
+        # 새 객체로 만든다. launch_simulation 앞에서 env_cfg에 넣은 설정 객체는 기본값으로 덮였다 (오차 없이 학습된 원인)
+        print(f"[INFO] 학습 오차 최댓값: {errors}")
+        sensor_cfg = SensorErrorCfg(**errors, randomize=True)
+        tracker.estimator.configure(PhaseEstimatorCfg())
         sensors.configure(sensor_cfg)
+        if any(v > 0.0 for v in errors.values()) and not set(nonzero_fields(sensors.cfg)) & set(errors):
+            raise RuntimeError(f"센서 오차 설정이 비었습니다: {nonzero_fields(sensors.cfg)}")
         print(f"[INFO] 학습 센서 오차 (에피소드마다 0 ~ 이 값): {nonzero_fields(sensors.cfg)}")
         env.reset()  # 여기서 새 설정으로 오차를 뽑는다
         sampled("env.reset 뒤")
