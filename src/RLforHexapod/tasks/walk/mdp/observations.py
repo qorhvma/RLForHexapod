@@ -5,7 +5,7 @@ from isaaclab.managers import ManagerTermBase, ObservationTermCfg, SceneEntityCf
 from isaaclab.utils.configclass import configclass
 from isaaclab.utils.math import quat_apply
 
-from .sensor_error import shared_errors
+from .sensor_model import get_sensor_model
 
 
 @configclass
@@ -108,7 +108,7 @@ class stairs_height_map(ManagerTermBase):
         y = y_min + y_spacing * torch.arange(int((y_max - y_min) / y_spacing + 1e-6) + 1, device=env.device)
         grid_x, grid_y = torch.meshgrid(x, y, indexing="ij")
         self.grid_x, self.grid_y = grid_x.flatten(), grid_y.flatten()
-        # 센서 오차(sensor_error.py)의 갱신 주기·구멍에 쓰는 마지막 출력
+        # 라이다 갱신 주기·구멍(sensor_model.py)에 쓰는 마지막 출력
         self.last = None
         self.refresh = torch.ones(env.num_envs, dtype=torch.bool, device=env.device)
 
@@ -120,7 +120,7 @@ class stairs_height_map(ManagerTermBase):
             self.refresh[env_ids] = True
 
     def __call__(self, env, asset_cfg: SceneEntityCfg, stairs: StairsGeometryCfg, x_range, y_range, spacing):
-        estimator, errors = shared_errors(env)
+        sensors = get_sensor_model(env)
         pose = self.asset.data.root_pose_w.torch
         base = pose[:, :3] - env.scene.env_origins
         forward = torch.zeros_like(base)
@@ -130,30 +130,31 @@ class stairs_height_map(ManagerTermBase):
         cos, sin = torch.cos(heading), torch.sin(heading)
         x = base[:, 0:1] + cos * self.grid_x - sin * self.grid_y
         y = base[:, 1:2] + sin * self.grid_x + cos * self.grid_y
-        if estimator is not None and estimator.cfg.map_shares_x:
-            # 몸통이 x + e에 있다고 믿으면 지도에서 x + e 주변을 잘라 온다 → 모서리가 단계 추정과 같은 만큼 밀려 보인다
-            x = x + estimator.pos_error[:, 0:1]
+        shift = sensors.map_x_shift()
+        if shift is not None:
+            # 몸통이 x + e에 있다고 믿으면 지도에서 x + e 주변을 잘라 온다 → 모서리가 단계 계산과 같은 만큼 밀려 보인다
+            x = x + shift
         height = base[:, 2:3] - stairs_terrain_height(stairs, x, y)
-        if errors is None:
+        if not sensors.distorts_map:
             return height
-        return self._distort(env, height, errors)
+        return self._distort(env, height, sensors)
 
-    def _distort(self, env, height, errors):
+    def _distort(self, env, height, sensors):
         """기울기, 높이 편향, 갱신 주기, 구멍. 기울기는 점군을 틀린 중력 방향으로 세운 결과라 앞뒤·좌우 거리에 비례한다."""
-        roll, pitch = errors.map_tilt_total().unbind(dim=1)
-        # 점의 높이가 pitch × 앞 거리 - roll × 왼쪽 거리만큼 높게 보인다 (sensor_error.student_projected_gravity와 같은 부호)
+        roll, pitch = sensors.map_tilt().unbind(dim=1)
+        # 점의 높이가 pitch × 앞 거리 - roll × 왼쪽 거리만큼 높게 보인다 (발끝 높이 계산, 중력 관측과 같은 부호)
         rise = pitch.unsqueeze(1) * self.grid_x - roll.unsqueeze(1) * self.grid_y
-        height = height - rise + errors.map_z.unsqueeze(1)
-        if not errors.holds_map or self.last is None or self.last.shape != height.shape:
+        height = height - rise + sensors.range_bias.unsqueeze(1)
+        if not sensors.holds_map or self.last is None or self.last.shape != height.shape:
             self.last = height
             self.refresh[:] = False
             return height
-        cfg = errors.cfg
+        cfg = sensors.cfg
         step = env.common_step_counter
-        due = ((step + errors.period_offset) % errors.period_steps == 0) | self.refresh
+        due = ((step + sensors.period_offset) % sensors.period_steps == 0) | self.refresh
         new = height
-        if cfg.map_dropout > 0.0:
-            stale = torch.rand_like(height) < cfg.map_dropout
+        if cfg.lidar_dropout > 0.0:
+            stale = torch.rand_like(height) < cfg.lidar_dropout
             new = torch.where(stale & ~self.refresh.unsqueeze(1), self.last, height)
         out = torch.where(due.unsqueeze(1), new, self.last)
         self.last = out

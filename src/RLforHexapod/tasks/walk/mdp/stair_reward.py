@@ -32,7 +32,7 @@ from isaaclab.utils.math import quat_apply
 
 from .observations import stair_env_mask, stairs_terrain_height, tip_offsets
 from .phase_estimator import PhaseEstimator
-from .sensor_error import ObsErrorState
+from .sensor_model import get_sensor_model
 
 # ===== 다리 =====
 # 라이다 쪽이 앞(+x)이다 (scripts/postprocess_urdf.py에서 몸통을 180° 돌림)
@@ -111,7 +111,7 @@ class StairGaitCfg:
 
 
 class PhaseMeasurement(NamedTuple):
-    """단계 판정에 쓰는 측정값. StairTracker는 참값을, PhaseEstimator는 오차를 더한 값을 넣는다."""
+    """단계 판정에 쓰는 측정값. StairTracker는 참값을, PhaseEstimator는 센서 읽기 값(sensor_model.py)을 넣는다."""
 
     body_x: torch.Tensor      # 몸통 x, env 원점 기준 (N,)
     tips: torch.Tensor        # 발끝 위치, env 원점 기준 (N, 6, 3)
@@ -202,13 +202,12 @@ class StairTracker:
         self.backward_speed = torch.zeros(n, device=device)
         self.settle_score = torch.zeros(n, device=device)
 
-        # student가 받을 추정 단계. phase_error 설정이 있는 task만 만든다
+        # 센서 모델 (env.cfg.sensor_error가 없으면 오차 없음). 에피소드 오차를 이 tracker의 리셋 때 다시 뽑는다
+        self.sensors = get_sensor_model(env)
+        # student가 받을 추정 단계. phase_estimator 설정이 있는 task만 만든다
         self.front_feet = FRONT
-        error_cfg = getattr(env.cfg, "phase_error", None)
-        self.estimator = PhaseEstimator(self, error_cfg) if error_cfg is not None else None
-        # student 관측에만 들어가는 센서 오차. obs_error 설정이 있는 task만 만든다 (지금은 평가 스크립트가 넣는다)
-        obs_error_cfg = getattr(env.cfg, "obs_error", None)
-        self.obs_error = ObsErrorState(env, obs_error_cfg) if obs_error_cfg is not None else None
+        estimator_cfg = getattr(env.cfg, "phase_estimator", None)
+        self.estimator = PhaseEstimator(self, estimator_cfg) if estimator_cfg is not None else None
 
     # ----- 지금 단계 -----
     def phase_and_level(self, move=None):
@@ -437,10 +436,9 @@ class StairTracker:
         self.standing_feet_off[env_ids] = 0.0
         self.backward_speed[env_ids] = 0.0
         self.settle_score[env_ids] = 0.0
+        self.sensors.reset(env_ids)
         if self.estimator is not None:
             self.estimator.reset(env_ids, moves)
-        if self.obs_error is not None:
-            self.obs_error.reset(env_ids)
 
 
 def get_tracker(env) -> StairTracker:
@@ -665,7 +663,7 @@ def stair_phase_est_obs(env) -> torch.Tensor:
     """로봇 센서로 계산한다고 가정한 추정 단계 one-hot (N, PHASE_OBS_SIZE). 오차가 0이면 stair_phase_obs와 같다."""
     tracker = get_tracker(env)
     if tracker.estimator is None:
-        raise RuntimeError("stair_phase_est_obs를 쓰는 env 설정에는 phase_error가 있어야 합니다.")
+        raise RuntimeError("stair_phase_est_obs를 쓰는 env 설정에는 phase_estimator가 있어야 합니다.")
     return tracker.phase_one_hot(tracker.estimator.delayed_move)
 
 

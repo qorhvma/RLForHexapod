@@ -18,24 +18,22 @@ teacher와 student를 같은 조건으로 비교한다.
 
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-PhaseAux --checkpoint <student.pt>
 
-추정 단계를 보는 student(Hexapod-Stair-Student-A-Phase)는 단계 계산의 오차를 넣어 잴 수 있다.
-x 위치·관절각 편향·접촉 오판은 기본으로 student 관측(높이맵 위치, joint_pos, feet_contact)에도 같은 값이 들어간다
-(실물에서 같은 센서 값을 쓰므로). --no-share_obs면 단계 계산에만, --no-map_shares_x면 높이맵은 밀지 않는다.
-높이맵 기울기·높이·주기·구멍, IMU 기울기, 관절·자이로 노이즈는 관측에만 들어간다 (--obs_*, sweep 아래쪽 줄).
-추정 단계를 안 보는 student(A, A-PhaseAux)도 --phase_sweep을 돌릴 수 있다. 영향이 없는 줄은 건너뛴다.
---phase_sweep은 오차별로 차례대로 재서 표로 보고한다. 설정마다 첫 에피소드 전체를 돌리므로 --num_envs 1024 정도를 권한다.
+student는 센서 오차를 넣어 잴 수 있다 (mdp/sensor_model.py). 오차는 센서별 원인으로 한 번만 뽑고,
+그 센서 값을 쓰는 모든 곳(단계 계산과 student 관측)에 같은 값으로 들어간다. --err_* 플래그는 --help 참고.
+--error_sweep은 원인별로 차례대로 재서 표로 보고한다. 설정마다 첫 에피소드 전체를 돌리므로 --num_envs 1024 정도를 권한다.
+추정 단계를 안 보는 student(A, A-PhaseAux)는 단계 계산에만 쓰는 원인을 건너뛴다.
 
-    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --num_envs 1024
-    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_pos_bias 2 --phase_delay 40
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --error_sweep --num_envs 1024
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --err_lidar_x 2 --phase_delay 40
 
-위치 오차는 x(라이다, 수직면 기준)와 높이(지지 발 기준 발끝 높이)로 나눠 넣는다.
-판정 방식은 task 설정을 따른다 (A-Phase, A-PhaseNoise 모두 높이 3cm, 건너뛰기 끔). 옵션으로 바꿀 수 있다.
+높이맵 방식: --map_mode accumulated(기본, 지도에 쌓아 잘라 씀: x 위치 오차만큼 높이맵도 밀림) 또는 per_frame.
+단계 판정 방식은 task 설정을 따른다 (A-Phase, A-PhaseNoise 모두 높이 3cm, 건너뛰기 끔). 옵션으로 바꿀 수 있다.
 - --phase_judge contact: 높이 3cm 또는 (발끝 스위치 + 높이 --phase_contact_window cm, --phase_contact_confirm ms 유지)
 - --phase_catch_up: 전진 단계에서 다음 옮기기 단계가 이미 끝났으면 건너뛴다
 평가에서는 오차 크기를 항상 지정한 값 그대로 쓴다 (학습용 무작위 크기는 쓰지 않는다).
 sweep의 각 줄 아래에 뒤처진 시간이 어느 추정 단계에서 생겼는지 나온다.
 
-    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --phase_sweep --phase_judge contact --phase_catch_up
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <student.pt> --error_sweep --phase_judge contact --phase_catch_up
 """
 
 import argparse
@@ -50,50 +48,68 @@ import torch
 START_NAMES = {0: "0번 (계단 앞)", 1: "1번 (앞발이 수직면 앞)"}
 FAIL_TERMS = ("base_low", "bad_ori", "sim_nan", "sim_blowup")  # 걷기에서 넘어지거나 물리가 터진 종료
 
-# --phase_sweep의 시험 목록. 측정값이 없어 잡은 시작값이다. 값은 PhaseErrorCfg 단위 (m, rad, 확률, 초)
-PHASE_SWEEP = [
+# 센서 오차 플래그: (플래그, SensorErrorCfg 필드, 단위 변환, 설명)
+SENSOR_FLAGS = [
+    ("--err_lidar_x", "lidar_x_bias", 0.01, "라이다: 수직면 기준 몸통 x 편향 [cm]"),
+    ("--err_lidar_x_noise", "lidar_x_noise", 0.01, "라이다: 몸통 x 노이즈 std [cm]"),
+    ("--err_lidar_tilt", "lidar_mount_tilt", math.pi / 180.0, "라이다: 장착 각도 오차 (높이맵 기울기) [도]"),
+    ("--err_lidar_range", "lidar_range_bias", 0.01, "라이다: 거리 편향 (높이맵 높이) [cm]"),
+    ("--err_lidar_period", "lidar_period", 0.001, "라이다: 높이맵 갱신 주기 [ms]"),
+    ("--err_lidar_dropout", "lidar_dropout", 0.01, "라이다: 높이맵 칸이 직전 값으로 남을 확률 [%%]"),
+    ("--err_imu_tilt", "imu_tilt", math.pi / 180.0, "IMU: 중력 방향 오차 (중력 관측, 높이맵, 발끝 높이) [도]"),
+    ("--err_gyro_noise", "gyro_noise", 1.0, "IMU: 각속도 노이즈 std [rad/s]"),
+    ("--err_encoder", "encoder_bias", math.pi / 180.0, "엔코더: 관절각 편향 (관절 관측, 발끝, 앞다리 접힘) [도]"),
+    ("--err_encoder_noise", "encoder_noise", math.pi / 180.0, "엔코더: 관절각 노이즈 std [도]"),
+    ("--err_contact_flip", "contact_flip", 0.01, "발끝 스위치: 오판 확률 (접촉 관측, 단계 계산) [%%]"),
+    ("--err_step_height", "step_height_error", 0.01, "발끝 높이 계산: 가정한 단 높이 오차 [cm]"),
+    ("--err_foot_height", "foot_height_bias", 0.01, "발끝 높이 계산: 나머지 편향 (기준 발 등) [cm]"),
+    ("--err_foot_height_noise", "foot_height_noise", 0.01, "발끝 높이 계산: 나머지 노이즈 std [cm]"),
+]
+
+# --error_sweep의 시험 목록. 측정값이 없어 잡은 시작값이다. 값은 SensorErrorCfg / PhaseEstimatorCfg 단위 (m, rad, 확률, 초)
+# 한 줄 = 한 원인. 그 원인은 단계 계산과 student 관측 중 그 센서를 쓰는 모든 곳에 같은 값으로 들어간다
+ERROR_SWEEP = [
     ("오차 없음", {}),
-    ("x 편향 1cm", {"pos_bias": 0.01}),
-    ("x 편향 2cm", {"pos_bias": 0.02}),
-    ("x 편향 4cm", {"pos_bias": 0.04}),
-    ("x 노이즈 0.5cm", {"pos_noise": 0.005}),
-    ("x 노이즈 1cm", {"pos_noise": 0.01}),
-    ("높이 편향 0.5cm", {"height_bias": 0.005}),
-    ("높이 편향 1cm", {"height_bias": 0.01}),
-    ("높이 편향 2cm", {"height_bias": 0.02}),
-    ("높이 노이즈 0.5cm", {"height_noise": 0.005}),
-    ("관절 편향 1도", {"joint_bias": math.radians(1.0)}),
-    ("관절 편향 2도", {"joint_bias": math.radians(2.0)}),
-    ("관절 편향 4도", {"joint_bias": math.radians(4.0)}),
-    ("접촉 오판 2%", {"contact_flip": 0.02}),
-    ("접촉 오판 5%", {"contact_flip": 0.05}),
-    ("지연 40ms", {"delay": 0.04}),
-    ("지연 100ms", {"delay": 0.1}),
-    ("전체 (예상 수준)", {
-        "pos_bias": 0.02, "pos_noise": 0.005, "height_bias": 0.01, "height_noise": 0.003,
-        "joint_bias": math.radians(2.0), "contact_flip": 0.02, "delay": 0.04,
-    }),
-    # 관측에만 들어가는 오차 (ObsErrorCfg 단위: rad, m, 초, 확률, rad/s)
-    ("높이맵 기울기 0.5도", {"map_tilt": math.radians(0.5)}),
-    ("높이맵 기울기 1도", {"map_tilt": math.radians(1.0)}),
-    ("높이맵 기울기 2도", {"map_tilt": math.radians(2.0)}),
+    ("라이다 x 편향 1cm", {"lidar_x_bias": 0.01}),
+    ("라이다 x 편향 2cm", {"lidar_x_bias": 0.02}),
+    ("라이다 x 편향 4cm", {"lidar_x_bias": 0.04}),
+    ("라이다 x 노이즈 0.5cm", {"lidar_x_noise": 0.005}),
+    ("라이다 x 노이즈 1cm", {"lidar_x_noise": 0.01}),
+    ("라이다 장착 각도 0.5도", {"lidar_mount_tilt": math.radians(0.5)}),
+    ("라이다 장착 각도 1도", {"lidar_mount_tilt": math.radians(1.0)}),
+    ("라이다 장착 각도 2도", {"lidar_mount_tilt": math.radians(2.0)}),
+    ("라이다 거리 편향 1cm", {"lidar_range_bias": 0.01}),
+    ("라이다 거리 편향 2cm", {"lidar_range_bias": 0.02}),
+    ("라이다 주기 50ms", {"lidar_period": 0.05}),
+    ("라이다 주기 100ms", {"lidar_period": 0.1}),
+    ("높이맵 구멍 5%", {"lidar_dropout": 0.05}),
+    ("높이맵 구멍 20%", {"lidar_dropout": 0.2}),
     ("IMU 기울기 0.5도", {"imu_tilt": math.radians(0.5)}),
     ("IMU 기울기 1도", {"imu_tilt": math.radians(1.0)}),
-    ("높이맵 높이 1cm", {"map_z_bias": 0.01}),
-    ("높이맵 높이 2cm", {"map_z_bias": 0.02}),
-    ("높이맵 주기 50ms", {"map_period": 0.05}),
-    ("높이맵 주기 100ms", {"map_period": 0.1}),
-    ("높이맵 구멍 5%", {"map_dropout": 0.05}),
-    ("높이맵 구멍 20%", {"map_dropout": 0.2}),
-    ("관절 노이즈 0.5도", {"joint_noise": math.radians(0.5)}),
+    ("IMU 기울기 2도", {"imu_tilt": math.radians(2.0)}),
     ("자이로 노이즈 0.05", {"gyro_noise": 0.05}),
-    ("전체 + 관측 오차", {
-        "pos_bias": 0.02, "pos_noise": 0.005, "height_bias": 0.01, "height_noise": 0.003,
-        "joint_bias": math.radians(2.0), "contact_flip": 0.02, "delay": 0.04,
-        "map_tilt": math.radians(1.0), "imu_tilt": math.radians(0.5), "map_z_bias": 0.01, "map_period": 0.1,
-        "map_dropout": 0.05, "joint_noise": math.radians(0.5), "gyro_noise": 0.05,
+    ("엔코더 편향 1도", {"encoder_bias": math.radians(1.0)}),
+    ("엔코더 편향 2도", {"encoder_bias": math.radians(2.0)}),
+    ("엔코더 편향 4도", {"encoder_bias": math.radians(4.0)}),
+    ("엔코더 노이즈 0.5도", {"encoder_noise": math.radians(0.5)}),
+    ("스위치 오판 2%", {"contact_flip": 0.02}),
+    ("스위치 오판 5%", {"contact_flip": 0.05}),
+    ("단 높이 가정 1cm", {"step_height_error": 0.01}),
+    ("단 높이 가정 2cm", {"step_height_error": 0.02}),
+    ("발끝 높이 나머지 1cm", {"foot_height_bias": 0.01}),
+    ("발끝 높이 나머지 2cm", {"foot_height_bias": 0.02}),
+    ("발끝 높이 노이즈 0.5cm", {"foot_height_noise": 0.005}),
+    ("계산 지연 40ms", {"delay": 0.04}),
+    ("계산 지연 100ms", {"delay": 0.1}),
+    ("전체 (예상 수준)", {
+        "lidar_x_bias": 0.02, "lidar_x_noise": 0.005, "lidar_mount_tilt": math.radians(1.0), "lidar_range_bias": 0.01,
+        "lidar_period": 0.1, "lidar_dropout": 0.05, "imu_tilt": math.radians(0.5), "gyro_noise": 0.05,
+        "encoder_bias": math.radians(2.0), "encoder_noise": math.radians(0.5), "contact_flip": 0.02,
+        "step_height_error": 0.01, "foot_height_bias": 0.01, "foot_height_noise": 0.003, "delay": 0.04,
     }),
 ]
+# 단계 계산에만 들어가는 원인. 추정 단계를 관측으로 받지 않는 student에는 영향이 없다
+ESTIMATE_ONLY = {"step_height_error", "foot_height_bias", "foot_height_noise", "delay"}
 
 
 def collect_first_episodes(env, policy, obs, tracker, termination_manager, max_steps, on_step=None):
@@ -316,31 +332,27 @@ def phase_shares(counts):
     return (counts / counts.sum().clamp_min(1.0)).tolist()
 
 
-# 단계 추정에만 쓰는 오차. 추정 단계를 관측으로 받지 않는 student에는 영향이 없다
-ESTIMATE_ONLY = {"height_bias", "height_noise", "delay"}
-# 관측과 공유하는 오차 (share_obs일 때 student 관측에도 들어간다)
-SHARED = {"pos_bias", "pos_noise", "joint_bias", "contact_flip"}
-
-
-def run_phase_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate):
-    """PHASE_SWEEP의 오차마다 첫 에피소드를 돌려 결과를 한 줄씩 출력한다. 정책과 env는 재사용한다.
+def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate):
+    """ERROR_SWEEP의 오차마다 첫 에피소드를 돌려 결과를 한 줄씩 출력한다. 정책과 env는 재사용한다.
     추정 단계를 관측으로 받지 않는 student는 영향이 없는 줄을 건너뛰고, 단계 일치 칸을 비운다."""
     base_env = env.unwrapped
-    print("\n===== 단계 추정·관측 오차 시험 =====")
+    print("\n===== 센서 오차 시험 =====")
     print("오차 | 꼭대기 도달 | 추정 단계 일치 / 앞섬 / 뒤처짐 | 평균 단계 | 종료 이유")
-    for name, error in PHASE_SWEEP:
-        phase_cfg, obs_cfg = make_error_cfgs(**error)
-        if not observes_estimate and error:
-            relevant = set(error) - ESTIMATE_ONLY - (set() if phase_cfg.share_obs else SHARED)
-            if not relevant:
-                continue
+    for name, error in ERROR_SWEEP:
+        if not observes_estimate and error and set(error) <= ESTIMATE_ONLY:
+            continue
+        estimator_cfg, sensor_cfg = make_error_cfgs(**error)
         # 이전 평가에서 만든 상태는 inference tensor라서 리셋도 inference_mode 안에서 해야 한다
         with torch.inference_mode():
-            tracker.estimator.configure(phase_cfg)
-            tracker.obs_error.configure(obs_cfg)
+            tracker.sensors.configure(sensor_cfg)
+            if tracker.estimator is not None:
+                tracker.estimator.configure(estimator_cfg)
             env.reset()  # 여기서 새 오차의 편향을 뽑는다
             policy.reset(torch.ones(base_env.num_envs, dtype=torch.bool, device=base_env.device))
-        on_step, counts, behind_at = phase_meter(tracker, is_stair)
+        if not observes_estimate:
+            on_step, counts, behind_at = None, torch.zeros(3), torch.zeros(len(PHASE_NAMES))
+        else:
+            on_step, counts, behind_at = phase_meter(tracker, is_stair)
         data = collect_first_episodes(
             env,
             policy,
@@ -387,7 +399,7 @@ def main():
     from isaaclab_tasks.utils import resolve_task_config, setup_preset_cli
 
     import RLforHexapod.tasks  # noqa: F401
-    from RLforHexapod.tasks.walk.mdp import ObsErrorCfg, PhaseErrorCfg, stair_env_mask
+    from RLforHexapod.tasks.walk.mdp import PhaseEstimatorCfg, SensorErrorCfg, stair_env_mask
 
     parser = argparse.ArgumentParser(description="저장된 정책의 계단 오르기 평가")
     parser.add_argument("--task", required=True, help="Hexapod-Stair 또는 Hexapod-Stair-Student-*")
@@ -395,17 +407,20 @@ def main():
     parser.add_argument("--teacher", action="store_true", help="student 대신 teacher로 움직여 기준 성능을 잰다")
     parser.add_argument("--num_envs", type=int, default=4096)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--phase_sweep", action="store_true", help="단계 추정 오차별로 차례대로 재서 표로 보고한다")
-    parser.add_argument("--phase_pos_bias", type=float, default=0.0, help="수직면에 대한 x 위치 편향 [cm]")
-    parser.add_argument("--phase_pos_noise", type=float, default=0.0, help="x 위치 노이즈 std [cm]")
-    parser.add_argument("--phase_height_bias", type=float, default=0.0, help="발끝 높이 편향 [cm]")
-    parser.add_argument("--phase_height_noise", type=float, default=0.0, help="발끝 높이 노이즈 std [cm]")
-    parser.add_argument("--phase_joint_bias", type=float, default=0.0, help="관절각 편향 [도]")
-    parser.add_argument("--phase_contact_flip", type=float, default=0.0, help="접촉 판정이 뒤집힐 확률 [%%]")
-    parser.add_argument("--phase_delay", type=float, default=0.0, help="단계 계산 지연 [ms]")
+    parser.add_argument(
+        "--error_sweep", "--phase_sweep", dest="error_sweep", action="store_true",
+        help="센서 오차 원인별로 차례대로 재서 표로 보고한다",
+    )
+    for flag, _, _, help_text in SENSOR_FLAGS:
+        parser.add_argument(flag, type=float, default=0.0, help=help_text)
+    parser.add_argument(
+        "--map_mode", choices=("accumulated", "per_frame"), default="accumulated",
+        help="높이맵 방식. accumulated = 지도에 쌓아 잘라 씀 (x 위치 오차만큼 높이맵도 밀림), per_frame = 매 프레임 스캔",
+    )
+    parser.add_argument("--phase_delay", type=float, default=None, help="단계 계산 지연 [ms]. 기본은 task 설정")
     parser.add_argument(
         "--phase_judge", choices=("height", "contact"), default=None,
-        help="딛고 있음 판정: height = 발 높이 (참값 tracker와 같음), contact = 접촉 센서. 기본은 task 설정",
+        help="딛고 있음 판정: height = 발 높이 (참값 tracker와 같음), contact = 높이 또는 발끝 스위치. 기본은 task 설정",
     )
     parser.add_argument(
         "--phase_contact_window", type=float, default=None,
@@ -419,82 +434,51 @@ def main():
         "--phase_catch_up", action=argparse.BooleanOptionalAction, default=None,
         help="전진 단계에서 다음 옮기기 단계가 이미 끝났으면 건너뛴다. 기본은 task 설정",
     )
-    parser.add_argument(
-        "--share_obs", action=argparse.BooleanOptionalAction, default=True,
-        help="x 위치·관절각 편향·접촉 오판을 단계 추정과 같은 값으로 student 관측(높이맵, joint_pos, feet_contact)에도 넣는다",
-    )
-    parser.add_argument(
-        "--map_shares_x", action=argparse.BooleanOptionalAction, default=True,
-        help="x 위치 오차만큼 높이맵을 민다 (지도에서 잘라 쓰는 경우). 매 프레임 스캔 높이맵이면 --no-map_shares_x",
-    )
-    parser.add_argument("--obs_map_tilt", type=float, default=0.0, help="높이맵 기울기 (라이다 장착 각도) [도]")
-    parser.add_argument("--obs_imu_tilt", type=float, default=0.0, help="중력 방향 오차 (높이맵과 projected_gravity) [도]")
-    parser.add_argument("--obs_map_z", type=float, default=0.0, help="높이맵 높이 편향 [cm]")
-    parser.add_argument("--obs_map_period", type=float, default=0.0, help="높이맵 갱신 주기 [ms]")
-    parser.add_argument("--obs_map_dropout", type=float, default=0.0, help="높이맵 칸이 직전 값으로 남을 확률 [%%]")
-    parser.add_argument("--obs_joint_noise", type=float, default=0.0, help="관절각 노이즈 std [도]")
-    parser.add_argument("--obs_gyro_noise", type=float, default=0.0, help="각속도 노이즈 std [rad/s]")
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
     sys.argv = [sys.argv[0]] + remaining
 
     env_cfg, agent_cfg = resolve_task_config(args.task, "rsl_rl_cfg_entry_point")
 
-    judge_options = (args.phase_judge, args.phase_contact_window, args.phase_contact_confirm, args.phase_catch_up)
-    phase_values = (args.phase_pos_bias, args.phase_pos_noise, args.phase_height_bias, args.phase_height_noise,
-                    args.phase_joint_bias, args.phase_contact_flip, args.phase_delay)
-    obs_values = (args.obs_map_tilt, args.obs_imu_tilt, args.obs_map_z, args.obs_map_period, args.obs_map_dropout,
-                  args.obs_joint_noise, args.obs_gyro_noise)
-    wants_errors = args.phase_sweep or any(o is not None for o in judge_options) or any(phase_values + obs_values)
-    if wants_errors and (args.teacher or not hasattr(env_cfg.observations, "student")):
+    sensor_values = {field: getattr(args, flag[2:]) * scale for flag, field, scale, _ in SENSOR_FLAGS}
+    judge_options = (args.phase_delay, args.phase_judge, args.phase_contact_window, args.phase_contact_confirm,
+                     args.phase_catch_up)
+    wants_errors = args.error_sweep or any(sensor_values.values()) or args.map_mode != "accumulated"
+    is_student = hasattr(env_cfg.observations, "student")
+    if wants_errors and (args.teacher or not is_student):
         parser.error("오차 평가는 student용입니다. teacher는 참값 관측을 봅니다.")
-    # 추정 단계를 관측으로 받는 task (A-Phase, A-PhaseNoise). 다른 student는 공유 오차와 관측 오차만 의미가 있다
-    observes_estimate = hasattr(env_cfg, "phase_error")
+    # 추정 단계를 관측으로 받는 task (A-Phase, A-PhaseNoise)
+    observes_estimate = hasattr(env_cfg, "phase_estimator")
+    if any(o is not None for o in judge_options) and not observes_estimate:
+        parser.error(f"{args.task}는 추정 단계를 쓰지 않습니다. --phase_* 판정 옵션은 A-Phase 계열에만 있습니다.")
 
-    # 평가는 오차를 지정한 크기 그대로 쓴다. 판정 방식(접촉 범위, 확인 시간, 건너뛰기)은 task 설정을 따른다
-    # 추정 단계를 안 보는 task도 공유 오차(x, 관절, 접촉)를 뽑으려고 추정기를 만든다
-    phase_settings = {}
-    if observes_estimate or wants_errors:
-        task_error = env_cfg.phase_error if observes_estimate else PhaseErrorCfg()
+    # 평가는 오차를 지정한 크기 그대로 쓴다 (학습용 무작위 크기는 쓰지 않는다). 판정 방식은 task 설정을 따른다
+    estimator_settings = {}
+    if observes_estimate:
+        task = env_cfg.phase_estimator
 
         def pick(value, default, scale=1.0):
             return default if value is None else value * scale
 
-        phase_settings = {
-            "by_contact": task_error.by_contact if args.phase_judge is None else args.phase_judge == "contact",
-            "contact_window": pick(args.phase_contact_window, task_error.contact_window, 0.01),
-            "contact_confirm": pick(args.phase_contact_confirm, task_error.contact_confirm, 0.001),
-            "catch_up": pick(args.phase_catch_up, task_error.catch_up),
-            "share_obs": args.share_obs,
-            "map_shares_x": args.map_shares_x,
+        estimator_settings = {
+            "by_contact": task.by_contact if args.phase_judge is None else args.phase_judge == "contact",
+            "contact_window": pick(args.phase_contact_window, task.contact_window, 0.01),
+            "contact_confirm": pick(args.phase_contact_confirm, task.contact_confirm, 0.001),
+            "catch_up": pick(args.phase_catch_up, task.catch_up),
         }
-        env_cfg.phase_error = PhaseErrorCfg(
-            pos_bias=args.phase_pos_bias / 100.0,
-            pos_noise=args.phase_pos_noise / 100.0,
-            height_bias=args.phase_height_bias / 100.0,
-            height_noise=args.phase_height_noise / 100.0,
-            joint_bias=math.radians(args.phase_joint_bias),
-            contact_flip=args.phase_contact_flip / 100.0,
-            delay=args.phase_delay / 1000.0,
-            **phase_settings,
+        env_cfg.phase_estimator = PhaseEstimatorCfg(
+            delay=pick(args.phase_delay, 0.0, 0.001), **estimator_settings
         )
-        env_cfg.obs_error = ObsErrorCfg(
-            map_tilt=math.radians(args.obs_map_tilt),
-            imu_tilt=math.radians(args.obs_imu_tilt),
-            map_z_bias=args.obs_map_z / 100.0,
-            map_period=args.obs_map_period / 1000.0,
-            map_dropout=args.obs_map_dropout / 100.0,
-            joint_noise=math.radians(args.obs_joint_noise),
-            gyro_noise=args.obs_gyro_noise,
-        )
+    if is_student and not args.teacher:
+        env_cfg.sensor_error = SensorErrorCfg(**sensor_values, map_mode=args.map_mode)
 
-    phase_fields = {f.name for f in dataclasses.fields(PhaseErrorCfg)}
+    estimator_fields = {f.name for f in dataclasses.fields(PhaseEstimatorCfg)}
 
     def make_error_cfgs(**error):
-        """sweep 한 줄의 오차를 단계 추정기 설정과 관측 오차 설정으로 나눈다."""
-        phase = {k: v for k, v in error.items() if k in phase_fields}
-        obs = {k: v for k, v in error.items() if k not in phase_fields}
-        return PhaseErrorCfg(**phase, **phase_settings), ObsErrorCfg(**obs)
+        """sweep 한 줄의 오차를 센서 오차 설정과 단계 추정기 설정으로 나눈다."""
+        estimator = {k: v for k, v in error.items() if k in estimator_fields}
+        sensor = {k: v for k, v in error.items() if k not in estimator_fields}
+        return PhaseEstimatorCfg(**estimator, **estimator_settings), SensorErrorCfg(**sensor, map_mode=args.map_mode)
 
     with launch_simulation(env_cfg, args), contextlib.ExitStack() as cleanup:
         agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
@@ -519,19 +503,17 @@ def main():
         tracker = base_env.stair_tracker
         is_stair = stair_env_mask(base_env)
         is_walk = ~is_stair
-        if phase_settings:
-            s = phase_settings
-            if observes_estimate:
-                judge = "높이 3cm"
-                if s["by_contact"]:
-                    judge += f" 또는 (스위치 + 높이 {s['contact_window'] * 100:.1f}cm, {s['contact_confirm'] * 1000:.0f}ms 유지)"
-                print(f"[INFO] 딛고 있음 판정: {judge} | 전진 건너뛰기: {'켬' if s['catch_up'] else '끔'}")
-            share = "켬" if s["share_obs"] else "끔"
-            map_x = "켬" if s["share_obs"] and s["map_shares_x"] else "끔"
-            print(f"[INFO] x·관절·접촉 오차를 student 관측에도: {share} (높이맵 x 이동: {map_x})")
+        if observes_estimate:
+            s = estimator_settings
+            judge = "높이 3cm"
+            if s["by_contact"]:
+                judge += f" 또는 (스위치 + 높이 {s['contact_window'] * 100:.1f}cm, {s['contact_confirm'] * 1000:.0f}ms 유지)"
+            print(f"[INFO] 딛고 있음 판정: {judge} | 전진 건너뛰기: {'켬' if s['catch_up'] else '끔'}")
+        if is_student and not args.teacher:
+            print(f"[INFO] 높이맵 방식: {args.map_mode}")
 
-        if args.phase_sweep:
-            run_phase_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate)
+        if args.error_sweep:
+            run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate)
             return
 
         on_step, walk_totals, walk_steps = walk_meter(base_env, is_walk) if is_walk.any() else (None, None, None)
