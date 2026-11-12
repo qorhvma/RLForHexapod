@@ -169,11 +169,22 @@ def main():
         n = base_env.num_envs
         # 센서 오차를 env에 직접 넣는다. env 설정만 바꾸면 복사 과정에서 빠져 오차 없이 학습된 적이 있다
         print(f"[INFO] env가 만든 센서 오차: {nonzero_fields(tracker.sensors.cfg)}")
-        tracker.sensors.configure(sensor_cfg)
+        sensors = tracker.sensors
+
+        def sampled(where):
+            print(f"[INFO] 뽑힌 오차 ({where}): 라이다 x 편향 |평균| {sensors.x_bias.abs().mean().item() * 100:.2f}cm, "
+                  f"엔코더 편향 |평균| {math.degrees(sensors.encoder_bias.abs().mean().item()):.2f}도 "
+                  f"(sensor_model id {id(sensors)}, env.sensor_model id {id(getattr(base_env, 'sensor_model', None))})")
+
+        sampled("env 생성 직후")
+        sensors.configure(sensor_cfg)
+        print(f"[INFO] 학습 센서 오차 (에피소드마다 0 ~ 이 값): {nonzero_fields(sensors.cfg)}")
         env.reset()  # 여기서 새 설정으로 오차를 뽑는다
-        print(f"[INFO] 학습 센서 오차 (에피소드마다 0 ~ 이 값): {nonzero_fields(tracker.sensors.cfg)}")
-        print(f"[INFO] 뽑힌 라이다 x 편향 |평균| {tracker.sensors.x_bias.abs().mean().item() * 100:.2f}cm, "
-              f"엔코더 편향 |평균| {math.degrees(tracker.sensors.encoder_bias.abs().mean().item()):.2f}도")
+        sampled("env.reset 뒤")
+        if sensor_cfg.lidar_x_bias > 0.0 and sensors.x_bias.abs().max().item() == 0.0:
+            print("[WARN] env.reset이 센서 오차를 다시 뽑지 않았습니다. 직접 뽑습니다.")
+            sensors.reset(torch.arange(n, device=device))
+            sampled("직접 뽑은 뒤")
 
         runner = create_rsl_rl_runner(env, agent_cfg)
         print(f"[INFO] A-Phase 정책: {args.policy}")
