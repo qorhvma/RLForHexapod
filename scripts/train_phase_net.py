@@ -4,6 +4,7 @@ A-Phase student(참값 단계로 증류한 체크포인트)가 계단을 오르�
 참값 단계를 맞히도록 cross-entropy로 학습한다.
 
     uv run python scripts/train_phase_net.py --policy <A_phase model_3550.pt> --headless
+    uv run python scripts/train_phase_net.py --task Hexapod-Student-A-Phase --policy <통합 A-Phase model_*.pt>
 
 데이터를 만드는 방식 (DAgger와 같은 생각):
 - 처음에는 A-Phase가 참값 단계를 보며 움직인다. 신경망이 아직 엉터리라 그 출력으로 움직이면 첫 단에서 넘어진다.
@@ -45,7 +46,11 @@ A-Phase student(참값 단계로 증류한 체크포인트)가 계단을 오르�
 - Phase/accuracy_net: 신경망 출력으로 움직인 env에서의 정답률
 - Phase/accuracy_bias_free, Phase/accuracy_biased: 그중 편향 없는 / 있는 에피소드
 - Phase/stuck_share: 신경망으로 움직인 env에서 0.5초 넘게 계속 틀리고 있는 step의 비율 (규칙 추정기의 "뒤처져 굳음"에 해당)
+- Phase/accuracy_walk: 걷기·계단 통합 task(Hexapod-Student-A-Phase)의 걷기 env 정답률 (정답은 늘 첫 전진)
 - Metrics/*: env 로그 (stair_reached_top 등, 참값으로 움직인 에피소드도 섞여 있다)
+
+통합 task에서는 위 정답률(accuracy_net 등)을 계단 env로만 센다. 걷기 env는 정답이 늘 첫 전진이라 섞으면 부풀려진다.
+손실에는 걷기 env도 넣는다: 평지를 걸을 때 단계를 앞서 말하지 않는 것도 배워야 하기 때문이다.
 """
 
 import argparse
@@ -117,7 +122,7 @@ def main():
         net_input,
         term_slice,
     )
-    from RLforHexapod.tasks.walk.mdp import PhaseEstimatorCfg, SensorErrorCfg
+    from RLforHexapod.tasks.walk.mdp import PhaseEstimatorCfg, SensorErrorCfg, stair_env_mask
 
     parser = argparse.ArgumentParser(description="단계 추정 신경망 학습")
     parser.add_argument("--task", default="Hexapod-Stair-Student-A-Phase", help="단계 입력을 받는 student task")
@@ -183,6 +188,7 @@ def main():
         device = base_env.device
         tracker = base_env.stair_tracker
         n = base_env.num_envs
+        is_stair = stair_env_mask(base_env)  # 통합 task가 아니면 전부 계단
         # 센서 오차와 판정 설정을 env에 직접 넣고 다시 리셋한다 (평가 스크립트의 오차 시험과 같은 방식)
         sensors = tracker.sensors
         tracker.estimator.configure(PhaseEstimatorCfg())
@@ -265,6 +271,8 @@ def main():
             stuck = torch.zeros((), device=device)
             correct_free = torch.zeros((), device=device)  # 편향 없는 에피소드 중 신경망으로 움직인 env
             count_free = torch.zeros((), device=device)
+            correct_walk = torch.zeros((), device=device)  # 통합 task의 걷기 env (신경망으로 움직인 env)
+            count_walk = torch.zeros((), device=device)
             env_logs: dict[str, list[float]] = {}
 
             # ----- 데이터 모으기 -----
@@ -281,7 +289,11 @@ def main():
                     buf_forced[t].copy_(wrapped.forced)
 
                     wrong = wrapped.last_logits.argmax(dim=-1) != label
-                    by_net = ~wrapped.forced
+                    by_net_all = ~wrapped.forced
+                    walk_net = by_net_all & ~is_stair
+                    correct_walk += (~wrong & walk_net).sum()
+                    count_walk += walk_net.sum()
+                    by_net = by_net_all & is_stair
                     correct_net += (~wrong & by_net).sum()
                     count_net += by_net.sum()
                     free = by_net & sensors.bias_free
@@ -337,6 +349,7 @@ def main():
                 "Phase/accuracy_bias_free": (correct_free / count_free).item() if count_free > 0 else float("nan"),
                 "Phase/accuracy_biased": ((correct_net - correct_free) / (count_net - count_free)).item()
                 if count_net > count_free else float("nan"),
+                "Phase/accuracy_walk": (correct_walk / count_walk).item() if count_walk > 0 else float("nan"),
                 "Phase/beta": beta,
             }
             for c in range(num_classes):
@@ -355,7 +368,8 @@ def main():
                     f"[{it}] loss {stats['Phase/loss']:.3f} | 정답률 (학습) {stats['Phase/accuracy_train']:.1%} "
                     f"(신경망으로 움직인 env) {stats['Phase/accuracy_net']:.1%} "
                     f"[편향 없음 {stats['Phase/accuracy_bias_free']:.1%} / 있음 {stats['Phase/accuracy_biased']:.1%}] | 0.5초+ 틀림 {stats['Phase/stuck_share']:.1%} "
-                    f"| 참값 비율 {beta:.2f} | 꼭대기 {top:.2f} | {time.time() - started:.1f}s",
+                    + (f"| 걷기 {stats['Phase/accuracy_walk']:.1%} " if count_walk > 0 else "")
+                    + f"| 참값 비율 {beta:.2f} | 꼭대기 {top:.2f} | {time.time() - started:.1f}s",
                     flush=True,
                 )
             if it % 100 == 0:
