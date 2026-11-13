@@ -41,6 +41,10 @@ sweep에서는 단계 계산에만 쓰는 원인(발끝 높이 계산, 계산 �
 규칙 판정을 입력으로 받는 신경망(phase_rule)은 지연만 건너뛰고, 줄마다 입력으로 받은 규칙 추정기의 일치도 보여 준다.
 
     uv run python scripts/eval_stairs.py --task Hexapod-Stair-Student-A-Phase --checkpoint <A_phase.pt> --phase_net <phase_net.pt> --error_sweep --num_envs 1024
+
+--fall_probe: 뒷발 단계에서 넘어진 에피소드와 통과한 에피소드의 자세(기울기, 발 위치, 지지 범위)를 단별로 비교한다.
+
+    uv run python scripts/eval_stairs.py --task Hexapod-Stair --checkpoint <teacher.pt> --fall_probe --num_envs 4096
 """
 
 import argparse
@@ -342,6 +346,155 @@ def confusion_report(confusion, title):
 STUCK_STEPS = 25  # 0.5초. 이보다 오래 계속 틀리면 "굳음"으로 센다
 
 
+class FallProbe:
+    """뒷발 단계(접기 전진·뒷발1·뒷발2)에서 넘어진 에피소드와 통과한 에피소드의 자세를 단별로 비교한다 (--fall_probe).
+    teacher 실패가 3번째 단의 뒷발2(move 17)에 몰려 있어, 아래 단(move 5, 11)과 무엇이 다른지 보려고 만들었다.
+    넘어짐: 그 단계에서 bad_ori로 끝남. 기록 시점은 끝나기 직전 step과 0.5초 전.
+    통과: 그 단계를 끝내고 다음 단계로 넘어감. 기록 시점은 넘어가기 직전 step과 0.5초 전."""
+
+    PHASES = (3, 4, 5)  # 접기 전진, 뒷발1, 뒷발2
+    HISTORY = 25  # 0.5초
+    # 몸통 기준: 앞 = +x, 왼쪽 = +y
+    FEATURES = [
+        ("앞으로 숙임 [도]", "pitch"), ("왼쪽 기울어짐 [도]", "roll"), ("|기울어짐| [도]", "tilt"),
+        ("이 단계에 머문 시간 [s]", "time"),
+        ("몸통 x - 수직면 [cm]", "body_x"), ("몸통 z - 윗면 [cm]", "body_z"),
+        ("앞발 x - 다음 수직면 [cm]", "front_x"), ("앞발 높이 - 지면 [cm]", "front_z"),
+        ("가운데발 x - 수직면 [cm]", "mid_x"),
+        ("L6 x - 수직면 [cm]", "l6_x"), ("L6 높이 - 지면 [cm]", "l6_z"),
+        ("L1 x - 수직면 [cm]", "l1_x"), ("L1 높이 - 지면 [cm]", "l1_z"),
+        ("닿은 발 수", "contacts"),
+        ("지지 뒤 끝 - 몸통 x [cm]", "support_back"), ("지지 앞 끝 - 몸통 x [cm]", "support_front"),
+        ("앞다리 접힘 (작은 쪽)", "fold"),
+    ]
+    PERCENT = {"body_x", "body_z", "front_x", "front_z", "mid_x", "l6_x", "l6_z", "l1_x", "l1_z",
+               "support_back", "support_front"}
+
+    def __init__(self, env, tracker, mask):
+        from RLforHexapod.tasks.walk.mdp import stairs_terrain_height
+
+        self.env, self.tracker, self.mask = env, tracker, mask
+        self.terrain = stairs_terrain_height
+        n, device = env.num_envs, env.device
+        self.names = [key for _, key in self.FEATURES]
+        self.buf = torch.zeros(self.HISTORY, n, len(self.names), device=device)
+        self.ptr = 0
+        self.filled = 0
+        self.phase_time = torch.zeros(n, device=device)
+        self.prev_move = tracker.move.clone()
+        steps = tracker.stairs.num_steps
+        shape = (steps, len(self.PHASES), 2, 2, len(self.names))  # (단, 단계, 통과/넘어짐, 0.5초 전/직전, 값)
+        self.sums = torch.zeros(shape, device=device)
+        self.counts = torch.zeros(shape[:3], device=device)
+        self.snapshot()
+
+    def snapshot(self):
+        t, env = self.tracker, self.env
+        phase, level = t.phase_and_level()
+        riser, top = t.riser_and_top(level)
+        riser, top = riser.unsqueeze(1), top.unsqueeze(1)
+        body, _ = t.body_state()
+        tips = t.tips()
+        ground = self.terrain(t.stairs, tips[..., 0], tips[..., 1])
+        air_time = t.sensor.data.current_air_time.torch[:, t.sensor_ids]
+        contact = air_time == 0
+        gravity = t.asset.data.projected_gravity_b.torch
+        rel_x = tips[..., 0] - body[:, 0:1]
+        big = torch.full_like(rel_x, 1e3)
+        back = torch.where(contact, rel_x, big).min(1).values
+        front = torch.where(contact, rel_x, -big).max(1).values
+        none = ~contact.any(1)
+        fold = (t.asset.data.joint_pos.torch[:, t.front_coxa_ids] / t.front_parallel).clamp(max=1.0)
+        x_from = tips[..., 0] - riser
+        z_from = tips[..., 2] - ground - t.gait.tip_height
+        values = {
+            "pitch": torch.rad2deg(torch.asin(gravity[:, 0].clamp(-1, 1))),
+            "roll": torch.rad2deg(torch.asin(gravity[:, 1].clamp(-1, 1))),
+            "tilt": torch.rad2deg(torch.acos((-gravity[:, 2]).clamp(-1, 1))),
+            "time": self.phase_time,
+            "body_x": body[:, 0] - riser[:, 0],
+            "body_z": body[:, 2] - top[:, 0],
+            "front_x": (tips[:, [0, 5], 0] - riser - t.stairs.tread).mean(1),
+            "front_z": z_from[:, [0, 5]].mean(1),
+            "mid_x": x_from[:, [1, 4]].mean(1),
+            "l6_x": x_from[:, 2], "l6_z": z_from[:, 2],
+            "l1_x": x_from[:, 3], "l1_z": z_from[:, 3],
+            "contacts": contact.float().sum(1),
+            "support_back": torch.where(none, torch.zeros_like(back), back),
+            "support_front": torch.where(none, torch.zeros_like(front), front),
+            "fold": fold.min(1).values,
+        }
+        self.buf[self.ptr] = torch.stack([values[k] for k in self.names], dim=1)
+        self.ptr = (self.ptr + 1) % self.HISTORY
+        self.filled = min(self.filled + 1, self.HISTORY)
+
+    def _add(self, ids, move, outcome):
+        """ids의 env를 move 단계의 outcome(0 = 통과, 1 = 넘어짐)으로 기록. 버퍼의 마지막 칸 = 직전 step."""
+        if len(ids) == 0:
+            return
+        last = self.buf[(self.ptr - 1) % self.HISTORY, ids]
+        early = self.buf[(self.ptr - self.filled) % self.HISTORY, ids]
+        phase, level = self.tracker.phase_and_level(move)
+        slot = torch.full_like(phase, -1)
+        for i, p in enumerate(self.PHASES):
+            slot = torch.where(phase == p, i, slot)
+        keep = slot >= 0
+        level, slot, last, early = level[keep], slot[keep], last[keep], early[keep]
+        result = torch.full_like(level, outcome)
+        for when, data in ((0, early), (1, last)):
+            self.sums.index_put_((level, slot, result, torch.full_like(level, when)), data, accumulate=True)
+        self.counts.index_put_((level, slot, result), torch.ones_like(level, dtype=self.counts.dtype), accumulate=True)
+
+    def chain(self, on_step):
+        manager = self.env.termination_manager
+
+        def step(dones, finished):
+            t = self.tracker
+            active = self.mask & ~finished
+            in_stairs = self.prev_move < t.final_advance
+            # 넘어짐: 이번 step에 bad_ori로 끝남. 끝난 env의 tracker.move는 이미 다음 에피소드 값이다
+            fell = dones & active & manager.get_term("bad_ori").bool() & in_stairs
+            self._add(fell.nonzero().squeeze(-1), t.ended_move[fell], 1)
+            # 통과: 끝나지 않고 단계가 올라감
+            passed = ~dones & active & (t.move > self.prev_move) & in_stairs
+            self._add(passed.nonzero().squeeze(-1), self.prev_move[passed], 0)
+            self.phase_time = torch.where(dones | (t.move != self.prev_move), torch.zeros_like(self.phase_time),
+                                          self.phase_time + self.env.step_dt)
+            self.prev_move = t.move.clone()
+            self.snapshot()
+            if on_step is not None:
+                on_step(dones, finished)
+
+        return step
+
+    def report(self):
+        lines = ["\n===== 뒷발 단계 넘어짐 진단 (--fall_probe) ====="]
+        lines.append("값은 평균. 앞으로 숙임 + = 머리가 아래, 왼쪽 기울어짐 + = 왼쪽(L1~L3)이 아래. 발 높이 0 = 딛고 있음")
+        names = [PHASE_NAMES[p] for p in self.PHASES]
+        steps = self.counts.shape[0]
+        for i, name in enumerate(names):
+            header = f"\n[{name}] " + " | ".join(
+                f"{k + 1}번째 단: 통과 {int(self.counts[k, i, 0])}, 넘어짐 {int(self.counts[k, i, 1])}" for k in range(steps)
+            )
+            lines.append(header)
+            cols = []
+            for k in range(steps):
+                for outcome, label in ((0, "통과"), (1, "넘어짐")):
+                    if self.counts[k, i, outcome] > 0:
+                        cols.append((k, outcome, f"{k + 1}단 {label}"))
+            if not cols:
+                continue
+            lines.append(f"{'':28s}" + "".join(f"{c[2] + ' -0.5s':>14s}{c[2] + ' 직전':>13s}" for c in cols))
+            for j, (label, key) in enumerate(self.FEATURES):
+                scale = 100.0 if key in self.PERCENT else 1.0
+                row = f"{label:28s}"
+                for k, outcome, _ in cols:
+                    mean = self.sums[k, i, outcome, :, j] / self.counts[k, i, outcome] * scale
+                    row += f"{mean[0].item():14.2f}{mean[1].item():13.2f}"
+                lines.append(row)
+        return "\n".join(lines)
+
+
 class NetPhaseMeter:
     """단계 추정 신경망(--phase_net)의 예측을 첫 에피소드 동안 참값 단계와 비교한다. PhaseNetPolicy를 감싼다.
     단계는 단마다 반복되는 7가지(stair_phase_obs)라서, 앞섬/뒤처짐은 한 단 안의 순환 차이로 정한다
@@ -542,6 +695,10 @@ def main():
         "--phase_net", default=None,
         help="단계 추정 신경망 (.pt, scripts/train_phase_net.py). A-Phase 계열의 단계 입력을 이 신경망 출력으로 바꾼다",
     )
+    parser.add_argument(
+        "--fall_probe", action="store_true",
+        help="뒷발 단계(접기 전진·뒷발1·뒷발2)에서 넘어진 에피소드와 통과한 에피소드의 자세를 단별로 비교한다",
+    )
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
     sys.argv = [sys.argv[0]] + remaining
@@ -650,7 +807,10 @@ def main():
         if observes_estimate and not is_walk.any() and args.phase_net is None:
             on_step, phase_counts, behind_at = phase_meter(tracker, is_stair)
         obs = env.get_observations()
-        aux_meter = net_meter = None
+        aux_meter = net_meter = fall_probe = None
+        if args.fall_probe:
+            fall_probe = FallProbe(base_env, tracker, is_stair)
+            on_step = fall_probe.chain(on_step)
         if args.phase_net is not None:
             net_meter = NetPhaseMeter(policy, tracker, is_stair)
             policy, on_step = net_meter, net_meter.chain(on_step)
@@ -682,6 +842,8 @@ def main():
             print(aux_meter.report())
         if net_meter is not None:
             print(net_meter.report(base_env.step_dt))
+        if fall_probe is not None:
+            print(fall_probe.report())
         if is_walk.any():
             print(format_walk_report(data, is_walk, walk_totals, walk_steps))
 
