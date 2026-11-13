@@ -4,14 +4,15 @@ A-Phase(model_3550 등)는 참값 단계로 증류돼서, 단계 입력이 틀�
 참값 단계가 끝나지 않고 굳는다. 여기서는 student가 신경망 단계를 보며 움직이고, teacher(참값 단계를 앎)의 행동을 정답으로
 배운다. 그래서 "단계 입력이 앞서 있어도 아직 끝나지 않은 동작을 마저 한다"를 배울 수 있다.
 
-    uv run python scripts/finetune_phase_policy.py --policy <A_phase model_3550.pt> --phase_net <phase_net.pt> --headless
+    uv run python scripts/finetune_phase_policy.py --policy <A_phase model_3550.pt> --phase_net <phase_net.pt>
 
 - 단계 칸: env가 관측을 만든 뒤 신경망 출력(one-hot)으로 바꾼다 (agents/phase_net.PhaseNetObsHook, HexapodEnv.phase_net_hook).
   rsl_rl 러너는 그 관측을 저장하고 학습하므로 student는 처음부터 끝까지 신경망 단계만 본다.
 - 센서 오차: 기본으로 신경망 체크포인트에 저장된 학습 오차(train_errors, bias_free_ratio 포함)를 그대로 쓴다.
   신경망이 학습 때와 같은 분포의 입력을 보게 하기 위해서다. 같은 오차가 student 관측에도 들어간다.
 - 규칙 추정기: 신경망 입력(phase_rule, phase_timer)에만 쓴다. 학습 때와 같게 높이 3cm, 건너뛰기 끔, 지연 없음.
-- 증류: --policy 체크포인트에서 student, teacher, optimizer, iteration을 그대로 불러와 --iterations만큼 더 돈다.
+- 증류: --policy 체크포인트에서 student, teacher, iteration을 불러와 --iterations만큼 더 돈다 (optimizer는 새로).
+  보통 학습처럼 에피소드 시작 시각을 env마다 흩어 놓는다 (init_at_random_ep_len).
   결과는 logs/rsl_rl/<experiment>/<시각>_<run_name>/model_<iter>.pt (보통 학습과 같은 위치).
 
 정책이 바뀌면 신경망이 보는 움직임도 바뀌므로, 끝나면 신경망을 새 정책으로 이어 학습한다:
@@ -60,8 +61,8 @@ def main():
     parser.add_argument("--error_scale", type=float, default=1.0, help="신경망 학습 오차에 곱하는 배율. 0 = 오차 없음")
     parser.add_argument("--bias_free_ratio", type=float, default=None,
                         help="편향을 0으로 하는 에피소드 비율. 기본: 신경망 학습 때 값")
-    parser.add_argument("--fresh_optimizer", action="store_true",
-                        help="optimizer 상태를 불러오지 않는다 (학습률을 runner 설정값으로 새로 시작)")
+    parser.add_argument("--resume_optimizer", action="store_true",
+                        help="체크포인트의 optimizer 상태도 불러온다. 기본은 새로 시작 (보통 학습의 이어 학습과 같음)")
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
     sys.argv = [sys.argv[0]] + remaining
@@ -130,7 +131,8 @@ def main():
 
         runner = create_rsl_rl_runner(env, agent_cfg, log_dir=log_dir)
         runner.add_git_repo_to_log(__file__)
-        load_cfg = {"student": True, "teacher": True, "optimizer": False, "iteration": True} if args.fresh_optimizer else None
+        # 보통 학습(isaaclab_rl train)과 같게: optimizer는 기본으로 새로 시작한다
+        load_cfg = None if args.resume_optimizer else {"student": True, "teacher": True, "optimizer": False, "iteration": True}
         print(f"[INFO] 이어 학습할 정책: {args.policy}")
         runner.load(args.policy, load_cfg=load_cfg, map_location=agent_cfg.device)
         start = runner.current_learning_iteration
@@ -145,7 +147,9 @@ def main():
         except Exception as error:  # 설정 파일 저장은 없어도 학습에는 지장이 없다
             print(f"[WARN] 설정 파일을 저장하지 못했습니다: {error}")
         print(f"[INFO] 저장 위치: {log_dir} (iteration {start}부터 {args.iterations}회)")
-        runner.learn(num_learning_iterations=args.iterations)
+        # 에피소드 시작 시각을 env마다 흩어 놓는다 (보통 학습과 같음). 안 하면 모든 env가 같은 순간을 같이 지나서
+        # 한 번의 업데이트가 에피소드의 한 구간(예: 출발 직후)만 배우고 나머지를 잊는다
+        runner.learn(num_learning_iterations=args.iterations, init_at_random_ep_len=agent_cfg.init_at_random_ep_len)
         env.close()
 
 
