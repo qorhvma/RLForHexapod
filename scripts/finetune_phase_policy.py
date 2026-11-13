@@ -55,7 +55,8 @@ def main():
     parser.add_argument("--policy", required=True, help="이어 학습할 A-Phase student 체크포인트 (.pt, teacher 포함)")
     parser.add_argument("--phase_net", required=True, help="단계 추정 신경망 (.pt, scripts/train_phase_net.py)")
     parser.add_argument("--iterations", type=int, default=500, help="더 돌 iteration 수")
-    parser.add_argument("--num_envs", type=int, default=None, help="기본: task 설정값")
+    parser.add_argument("--num_envs", type=int, default=2048,
+                        help="A-Phase 원래 학습과 같은 2048. task 설정값은 4라서 그대로 쓰면 정책이 무너진다")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--run_name", default="A_phase_netft")
     parser.add_argument("--error_scale", type=float, default=1.0, help="신경망 학습 오차에 곱하는 배율. 0 = 오차 없음")
@@ -86,8 +87,7 @@ def main():
 
     with launch_simulation(env_cfg, args):
         agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
-        if args.num_envs is not None:
-            env_cfg.scene.num_envs = args.num_envs
+        env_cfg.scene.num_envs = args.num_envs
         env_cfg.seed = agent_cfg.seed = args.seed
         if getattr(args, "device", None) is not None:
             env_cfg.sim.device = agent_cfg.device = args.device
@@ -150,7 +150,7 @@ def main():
             dump_train_configs(log_dir, env_cfg, agent_cfg)
         except Exception as error:  # 설정 파일 저장은 없어도 학습에는 지장이 없다
             print(f"[WARN] 설정 파일을 저장하지 못했습니다: {error}")
-        print(f"[INFO] 저장 위치: {log_dir} (iteration {start}부터 {args.iterations}회)")
+        print(f"[INFO] 저장 위치: {log_dir} (env {base_env.num_envs}대, iteration {start}부터 {args.iterations}회)")
         # 에피소드 시작 시각을 env마다 흩어 놓는다 (보통 학습과 같음). 안 하면 모든 env가 같은 순간을 같이 지나서
         # 한 번의 업데이트가 에피소드의 한 구간(예: 출발 직후)만 배우고 나머지를 잊는다
         runner.learn(num_learning_iterations=args.iterations, init_at_random_ep_len=agent_cfg.init_at_random_ep_len)
