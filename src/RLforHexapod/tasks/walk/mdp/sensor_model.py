@@ -45,6 +45,9 @@ class SensorErrorCfg:
     # 엔코더
     encoder_bias: float = 0.0      # 관절마다 편향 [rad]. 에피소드 고정
     encoder_noise: float = 0.0     # 관절마다 노이즈 std [rad]. step마다
+    # 관절각을 재지 못하는 실물: 관절각 자리에 마지막으로 보낸 목표각을 쓴다 (엔코더 오차 = 목표각 - 실제 각).
+    # 관절 관측, 발끝 위치, 앞다리 접힘이 모두 목표각 기준이 된다. joint_vel 관측은 목표각의 변화율 (student_joint_vel)
+    commanded_joints: bool = False
     # 발끝 스위치
     contact_flip: float = 0.0      # 발마다 step마다 뒤집힐 확률
     # 발끝 높이 계산 (IMU + 관절각 + 지지 발의 디딤면 기준). IMU·엔코더 몫은 위 원인에서 따로 들어간다
@@ -87,6 +90,10 @@ class SensorModel:
         self.flips = torch.zeros(n, self.num_feet, dtype=torch.bool, device=device)
         self.encoder_error = torch.zeros(n, self.num_joints, device=device)
         self.foot_height_error = torch.zeros(n, device=device)
+        # commanded_joints: 이번 step 목표각과 그 변화율 (asset 관절 순서)
+        self.commanded = torch.zeros(n, self.num_joints, device=device)
+        self.commanded_vel = torch.zeros(n, self.num_joints, device=device)
+        self.reset_step = torch.full((n,), -1, dtype=torch.long, device=device)  # 마지막 리셋의 step 번호
         self._step = None
         self.configure(cfg or SensorErrorCfg())
         self.reset(torch.arange(n, device=device))
@@ -136,6 +143,10 @@ class SensorModel:
         self.flips[env_ids] = False
         self.encoder_error[env_ids] = self.encoder_bias[env_ids]
         self.foot_height_error[env_ids] = self.foot_height_bias[env_ids]
+        # 리셋 직후는 기본 자세에 서 있고, 목표각도 기본 자세로 본다 (실물: 서기 자세를 보낸 뒤 시작)
+        self.commanded[env_ids] = self._default_joint_pos()[env_ids]
+        self.commanded_vel[env_ids] = 0.0
+        self.reset_step[env_ids] = self.env.common_step_counter
 
     def begin_step(self):
         """step 오차를 이번 step에 처음 읽을 때 한 번 뽑는다."""
@@ -149,12 +160,29 @@ class SensorModel:
         self.encoder_error = self.encoder_bias
         if cfg.encoder_noise > 0.0:
             self.encoder_error = self.encoder_bias + torch.randn_like(self.encoder_bias) * cfg.encoder_noise
+        if cfg.commanded_joints:
+            # 이번 step에 리셋된 env는 행동 항에 지난 에피소드 목표각이 남아 있으므로 리셋 때 값(기본 자세)을 둔다
+            fresh = (self.reset_step == step).unsqueeze(1)
+            target = torch.where(fresh, self.commanded, self._joint_target())
+            self.commanded_vel = torch.where(fresh, 0.0, (target - self.commanded) / self.env.step_dt)
+            self.commanded = target
+            self.encoder_error = self.encoder_error + target - _as_torch(self.asset.data.joint_pos)
         self.foot_height_error = self.foot_height_bias + torch.randn(self.n, device=self.device) * self.foot_height_noise
 
     # ----- 켜져 있는지 -----
     @property
     def has_encoder_error(self) -> bool:
-        return self.cfg.encoder_bias > 0.0 or self.cfg.encoder_noise > 0.0
+        return self.cfg.encoder_bias > 0.0 or self.cfg.encoder_noise > 0.0 or self.cfg.commanded_joints
+
+    def _default_joint_pos(self) -> torch.Tensor:
+        return _as_torch(self.asset.data.default_joint_pos)
+
+    def _joint_target(self) -> torch.Tensor:
+        """이번 step에 보낸 관절 목표각 (N, 관절 수), asset 관절 순서. 행동 항 하나가 모든 관절을 맡는다."""
+        term = self.env.action_manager.get_term("joint_pos")
+        target = self._default_joint_pos().clone()
+        target[:, term._joint_ids] = term.processed_actions
+        return target
 
     @property
     def holds_map(self) -> bool:
@@ -218,6 +246,10 @@ class SensorModel:
         return pitch.unsqueeze(1) * ahead - roll.unsqueeze(1) * left
 
 
+def _as_torch(x) -> torch.Tensor:
+    return x.torch if hasattr(x, "torch") else x
+
+
 def get_sensor_model(env) -> SensorModel:
     if not hasattr(env, "sensor_model"):
         env.sensor_model = SensorModel(env, getattr(env.cfg, "sensor_error", None))
@@ -232,6 +264,15 @@ def student_joint_pos(env) -> torch.Tensor:
     if sensors.has_encoder_error:
         out = out + sensors.read_encoder_error()
     return out
+
+
+def student_joint_vel(env) -> torch.Tensor:
+    """joint_vel_rel. commanded_joints면 목표각의 변화율 (실물에 관절 속도 측정이 없을 때)."""
+    sensors = get_sensor_model(env)
+    if sensors.cfg.commanded_joints:
+        sensors.begin_step()
+        return sensors.commanded_vel.clone()
+    return base_mdp.joint_vel_rel(env)
 
 
 def student_base_ang_vel(env) -> torch.Tensor:

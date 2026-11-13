@@ -335,7 +335,7 @@ class StudentAObservationsCfg(StairsObservationsCfg):
         # student_* 함수는 센서 오차 설정(sensor_error, mdp/sensor_model.py)이 없으면 원래 관측과 같다
         # 실제 관절각 (엔코더가 있다고 가정)
         joint_pos = ObsTerm(func=mdp.student_joint_pos)
-        joint_vel = ObsTerm(func=mdp.joint_vel_rel)
+        joint_vel = ObsTerm(func=mdp.student_joint_vel)  # sensor_error.commanded_joints가 아니면 joint_vel_rel과 같다
         # L2 내장 IMU로 측정 또는 계산
         base_ang_vel = ObsTerm(func=mdp.student_base_ang_vel)
         projected_gravity = ObsTerm(func=mdp.student_projected_gravity)

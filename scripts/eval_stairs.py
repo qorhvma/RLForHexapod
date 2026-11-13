@@ -707,6 +707,11 @@ def main():
         help="단계 추정 신경망 (.pt, scripts/train_phase_net.py). A-Phase 계열의 단계 입력을 이 신경망 출력으로 바꾼다",
     )
     parser.add_argument(
+        "--commanded_joints", action="store_true",
+        help="관절각을 재지 못하는 실물처럼 관절 관측·발끝·앞다리 접힘에 마지막 목표각을 쓴다 (관절 속도 = 목표각 변화율). "
+             "--error_sweep의 모든 줄에도 적용된다",
+    )
+    parser.add_argument(
         "--fall_probe", action="store_true",
         help="뒷발 단계(접기 전진·뒷발1·뒷발2)에서 넘어진 에피소드와 통과한 에피소드의 자세를 단별로 비교한다",
     )
@@ -717,6 +722,8 @@ def main():
     env_cfg, agent_cfg = resolve_task_config(args.task, "rsl_rl_cfg_entry_point")
 
     sensor_values = {field: getattr(args, flag[2:]) * scale for flag, field, scale, _ in SENSOR_FLAGS}
+    if args.commanded_joints:
+        sensor_values["commanded_joints"] = True
     judge_options = (args.phase_delay, args.phase_judge, args.phase_contact_window, args.phase_contact_confirm,
                      args.phase_catch_up, args.phase_advance_slack, args.phase_over_slack, args.phase_fold_slack)
     wants_errors = args.error_sweep or any(sensor_values.values()) or args.map_mode != "accumulated"
@@ -758,7 +765,8 @@ def main():
         """sweep 한 줄의 오차를 센서 오차 설정과 단계 추정기 설정으로 나눈다."""
         estimator = {k: v for k, v in error.items() if k in estimator_fields}
         sensor = {k: v for k, v in error.items() if k not in estimator_fields}
-        return PhaseEstimatorCfg(**estimator, **estimator_settings), SensorErrorCfg(**sensor, map_mode=args.map_mode)
+        return PhaseEstimatorCfg(**estimator, **estimator_settings), SensorErrorCfg(
+            **sensor, map_mode=args.map_mode, commanded_joints=args.commanded_joints)
 
     with launch_simulation(env_cfg, args), contextlib.ExitStack() as cleanup:
         agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, importlib.metadata.version("rsl-rl-lib"))
