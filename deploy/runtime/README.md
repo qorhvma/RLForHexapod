@@ -25,7 +25,7 @@ uv run deploy/runtime/test_runtime.py deploy/mixed_phase_v1
 
 ```python
 s = fusion.snapshot()                              # L2Fusion
-pose = fusion.stairs_pose(policy.x0)               # 계단 좌표 몸통. 수직면을 못 찾았으면 None
+pose = fusion.stairs_pose(policy.x0)               # 계단 좌표 몸통. 수직면을 못 찾았으면 계단 3 m 앞 평지로 본다
 r = Readings(s["gyro"], s["gravity"], contacts, s["height_map"], command, s["body_x"])
 out = policy.step_with_rule(r, *pose, fusion.speed())   # 측정 → 단계 진행 → 규칙 특징 → 신경망
 send(out.target)
@@ -55,6 +55,6 @@ python3 deploy/runtime/l2_sensors.py --base_in_imu X Y Z ROLL PITCH YAW
 
 ## 아직 없는 것
 
-- 수직면을 못 찾았을 때(계단이 안 보이는 평지)의 규칙 추정기 입력. 시뮬레이션 걷기 env는 계단 4 m 뒤에서 늘 단계 0이었다.
-  지금 `stairs_pose`는 None을 돌려주므로, 그동안 무엇을 넣을지 정해야 한다.
+- 계단이 안 보이는 평지에서는 "계단이 3 m 앞에 있다"고 넣는다 (학습 걷기 env와 비슷한 값). 평지를 걷다가 계단이 처음 보이는 순간
+  body_x가 -3 m에서 실제 값으로 뛰는데, 이런 전환은 학습에 없었다. 실물에서는 계단 앞에서 멈춘 뒤 `reset(0)`으로 계단 모드를 시작하는 편이 안전하다.
 - 50 Hz 정책 루프: 발끝 스위치(`#ft`)·조종 명령(HXCMD) 읽기, 목표각 → 펌웨어 각도 변환(`HexaCore` `leg_model.to_firmware`), 다리 번호·관절 영점·방향 확인.

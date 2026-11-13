@@ -93,16 +93,24 @@ class L2Fusion:
         r = np.where(np.isfinite(risers), risers, risers[0] + self.tread * np.arange(len(risers)))
         return np.concatenate([[s_base - r[0]], np.clip(s_base - r, *BODY_X_CLIP)])
 
-    def stairs_pose(self, x0: float) -> tuple[np.ndarray, np.ndarray] | None:
-        """계단 좌표(첫 수직면 x = x0, 계단 가운데 선 y = 0, 바닥 z = 0)에서 본 몸통 (위치, 회전). 수직면을 못 찾았으면 None.
-        규칙 단계 추정기(phase_rule.py)가 발끝을 이 좌표로 받는다. s축이 계단 가운데 선이라고 가정한다 (heightmap.py)."""
+    def stairs_pose(self, x0: float) -> tuple[np.ndarray, np.ndarray]:
+        """계단 좌표(첫 수직면 x = x0, 계단 가운데 선 y = 0, 바닥 z = 0)에서 본 몸통 (위치, 회전).
+        규칙 단계 추정기(phase_rule.py)가 발끝을 이 좌표로 받는다. s축이 계단 가운데 선이라고 가정한다 (heightmap.py).
+        수직면을 못 찾았으면 body_x와 같이 첫 수직면 NO_STAIRS_BODY_X 뒤의 평지로 본다
+        (시뮬레이션 걷기 env는 계단 4 m 뒤에서 시작해 늘 단계 0이었다). 바닥을 모르면 몸통 높이 FALLBACK_HEIGHT."""
         with self.lock:
-            if self.pipeline.locator is None or not np.isfinite(self.risers[0]) or not np.isfinite(self.floor_z):
-                return None
             loc = self.pipeline.locator
-            rel = self.p_wb[:2] - loc.origin
-            pos = np.array([x0 + rel @ loc.dir - self.risers[0], rel @ loc.perp, self.p_wb[2] - self.floor_z])
-            yaw = np.arctan2(loc.dir[1], loc.dir[0])
+            height = self.p_wb[2] - self.floor_z if np.isfinite(self.floor_z) else FALLBACK_HEIGHT
+            if loc is None:
+                forward = self.r_wb[:, 0]
+                yaw = np.arctan2(forward[1], forward[0])
+                pos = np.array([x0 + NO_STAIRS_BODY_X, 0.0, height])
+            else:
+                rel = self.p_wb[:2] - loc.origin
+                found = np.isfinite(self.risers[0])
+                x = x0 + rel @ loc.dir - self.risers[0] if found else x0 + NO_STAIRS_BODY_X
+                pos = np.array([x, rel @ loc.perp, height])
+                yaw = np.arctan2(loc.dir[1], loc.dir[0])
             c, s = np.cos(-yaw), np.sin(-yaw)
             r_sw = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
             return pos, r_sw @ self.r_wb
