@@ -63,6 +63,8 @@ def main():
                         help="편향을 0으로 하는 에피소드 비율. 기본: 신경망 학습 때 값")
     parser.add_argument("--resume_optimizer", action="store_true",
                         help="체크포인트의 optimizer 상태도 불러온다. 기본은 새로 시작 (보통 학습의 이어 학습과 같음)")
+    parser.add_argument("--no_net", action="store_true",
+                        help="대조 실험: 단계 칸을 바꾸지 않고 규칙 추정기 단계를 그대로 쓴다 (오차 0이면 보통 이어 학습과 같음)")
     add_launcher_args(parser)
     args, remaining = setup_preset_cli(parser, sys.argv[1:])
     sys.argv = [sys.argv[0]] + remaining
@@ -106,7 +108,8 @@ def main():
         if net.config["num_classes"] != cut.stop - cut.start:
             raise ValueError(f"단계 크기가 다릅니다: 신경망 {net.config['num_classes']}, 관측 {cut.stop - cut.start}")
         # 래퍼가 처음 리셋할 때부터 단계 칸이 신경망 출력이 되도록 감싸기 전에 넣는다
-        base_env.phase_net_hook = PhaseNetObsHook(net, cut, base_env.num_envs, device)
+        if not args.no_net:
+            base_env.phase_net_hook = PhaseNetObsHook(net, cut, base_env.num_envs, device)
         env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
         # 센서 오차와 판정 설정을 env에 직접 넣고 다시 리셋한다 (train_phase_net.py, eval_stairs.py와 같은 방식)
@@ -123,10 +126,11 @@ def main():
         if input_dim != net.config["input_dim"]:
             raise ValueError(f"신경망 입력 크기가 다릅니다: 신경망 {net.config['input_dim']}, env {input_dim}")
         shown = obs["student"][:, cut]
-        if not torch.equal(shown, net.to_phase_input(base_env.phase_net_hook.last_logits)):
+        if not args.no_net and not torch.equal(shown, net.to_phase_input(base_env.phase_net_hook.last_logits)):
             raise RuntimeError("student 관측의 단계 칸이 신경망 출력으로 바뀌지 않았습니다.")
         truth = tracker.phase_one_hot(tracker.move)
-        print(f"[INFO] 단계 입력: 단계 추정 신경망 {args.phase_net} (입력 그룹 {net.extra_groups}). "
+        source = "규칙 추정기 (--no_net 대조 실험)" if args.no_net else f"단계 추정 신경망 {args.phase_net} (입력 그룹 {net.extra_groups})"
+        print(f"[INFO] 단계 입력: {source}. "
               f"리셋 직후 참값 일치 {(shown.argmax(-1) == truth.argmax(-1)).float().mean().item():.1%}")
 
         runner = create_rsl_rl_runner(env, agent_cfg, log_dir=log_dir)
