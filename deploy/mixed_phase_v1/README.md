@@ -38,7 +38,7 @@ uv run scripts/verify_robot_policy.py deploy/mixed_phase_v1
 3. `phase = one_hot(argmax(logits))`를 student 관측의 단계 칸(`[275:282]`)에 넣는다.
 4. `student.onnx`를 돌린다. `h_out`은 다음 step의 `h_in`이 된다. 동작을 새로 시작할 때는 두 신경망 모두 `h_in = 0`.
 5. `target = default + scale × clip(actions, -2, 2)`, 관절 범위로 자른다 (값은 `robot_io.json`의 `action`).
-6. 다음 step의 `last_action`에는 자르기 **전** `actions`를 넣는다.
+6. 다음 step의 `last_action`에는 ±2로 자른 `actions`를 넣는다 (관절 범위로 자르기 전).
 
 계단은 명령 `(0.2, 0, 0, 0.24)`로만 학습했다. 계단을 오를 때는 이 명령을 준다.
 

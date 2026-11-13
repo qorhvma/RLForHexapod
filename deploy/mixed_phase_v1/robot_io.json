@@ -56,7 +56,7 @@
         "name": "last_action",
         "start": 42,
         "size": 18,
-        "doc": "직전 step에 정책이 낸 행동 (자르기 전 값, 시작은 0)"
+        "doc": "직전 step에 정책이 낸 행동을 ±clip으로 자른 값 (시작은 0)"
       },
       {
         "name": "feet_contact",
@@ -313,7 +313,7 @@
         -1.2217304706573486
       ]
     ],
-    "last_action": "student obs의 last_action에는 자르기 전 actions를 넣는다"
+    "last_action": "student obs의 last_action에는 ±clip으로 자른 actions를 넣는다 (관절 범위로 자르기 전)"
   },
   "feet_order": [
     "tibia_4",
@@ -385,4 +385,4 @@
     "num_steps": 3,
     "width": 1.0
   }
-}
+}

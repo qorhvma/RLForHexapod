@@ -34,7 +34,7 @@ TERM_DOCS = {
     "joint_vel": "관절 각속도 [rad/s], joint_names 순서",
     "base_ang_vel": "몸통 각속도, 몸통 좌표 (x 앞 = 라이다, y 왼쪽, z 위) [rad/s]",
     "projected_gravity": "몸통 좌표로 본 중력 방향 단위 벡터 (평평하게 서면 (0, 0, -1))",
-    "last_action": "직전 step에 정책이 낸 행동 (자르기 전 값, 시작은 0)",
+    "last_action": "직전 step에 정책이 낸 행동을 ±clip으로 자른 값 (시작은 0)",
     "feet_contact": "발끝 스위치 (1 = 눌림), feet_order 순서",
     "height_map": "몸통 원점 높이 - 지형 높이 [m]. 격자는 height_map_grid (몸통 위치·yaw를 따라감, 높이는 중력 방향)",
     "command": "조종 명령 (vx [m/s], vy [m/s], wz [rad/s], 몸통 높이 [m]). 계단을 오를 때는 (0.2, 0, 0, 0.24)로 학습",
@@ -187,7 +187,7 @@ def main():
                 "clip": agent_cfg.clip_actions,
                 "target_formula": "target = default_joint_pos_rad + scale * clip(actions, -clip, clip), 이어서 joint_limits_rad로 자름",
                 "joint_limits_rad": limits.tolist(),
-                "last_action": "student obs의 last_action에는 자르기 전 actions를 넣는다",
+                "last_action": "student obs의 last_action에는 ±clip으로 자른 actions를 넣는다 (관절 범위로 자르기 전)",
             },
             "feet_order": FOOT_BODIES,
             "height_map_grid": {
