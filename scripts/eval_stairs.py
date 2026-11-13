@@ -573,15 +573,18 @@ def phase_shares(counts):
 
 
 def run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate, phase_net=False,
-                    net_uses_rule=False):
+                    net_uses_rule=False, sweep_only=None):
     """ERROR_SWEEP의 오차마다 첫 에피소드를 돌려 결과를 한 줄씩 출력한다. 정책과 env는 재사용한다.
     추정 단계를 관측으로 받지 않는 student는 영향이 없는 줄을 건너뛰고, 단계 일치 칸을 비운다.
     phase_net: policy가 PhaseNetPolicy다. 일치 칸은 신경망 예측으로 잰다. 단계 계산에만 쓰는 원인은 건너뛴다.
-    net_uses_rule: 신경망이 규칙 판정(phase_rule)을 입력으로 받는다. 발끝 높이 계산 오차가 영향을 주므로 지연만 건너뛴다."""
+    net_uses_rule: 신경망이 규칙 판정(phase_rule)을 입력으로 받는다. 발끝 높이 계산 오차가 영향을 주므로 지연만 건너뛴다.
+    sweep_only: 이름에 이 글자 중 하나가 들어간 줄만 잰다 (None = 모두)."""
     base_env = env.unwrapped
     print("\n===== 센서 오차 시험 =====")
     print("오차 | 꼭대기 도달 | 추정 단계 일치 / 앞섬 / 뒤처짐 | 평균 단계 | 종료 이유")
     for name, error in ERROR_SWEEP:
+        if sweep_only and not any(key in name for key in sweep_only):
+            continue
         skipped = {"delay"} if net_uses_rule else ESTIMATE_ONLY
         if (not observes_estimate or phase_net) and error and set(error) <= skipped:
             continue
@@ -691,6 +694,14 @@ def main():
         "--phase_catch_up", action=argparse.BooleanOptionalAction, default=None,
         help="전진 단계에서 다음 옮기기 단계가 이미 끝났으면 건너뛴다. 기본은 task 설정",
     )
+    parser.add_argument("--phase_advance_slack", type=float, default=None,
+                        help="추정기만: 전진 완료 기준을 낮추는 몸통 x [cm]. 기본은 task 설정 (0)")
+    parser.add_argument("--phase_over_slack", type=float, default=None,
+                        help="추정기만: 옮기기 완료 기준(수직면 넘은 거리)을 낮추는 양 [cm]. 기본은 task 설정 (0)")
+    parser.add_argument("--phase_fold_slack", type=float, default=None,
+                        help="추정기만: 앞다리 접힘 기준을 낮추는 coxa 각도 [도]. 기본은 task 설정 (0)")
+    parser.add_argument("--sweep_only", default=None,
+                        help="--error_sweep에서 이름에 이 글자가 들어간 줄만 잰다. 쉼표로 여러 개 (예: '없음,x 편향 2cm,전체')")
     parser.add_argument(
         "--phase_net", default=None,
         help="단계 추정 신경망 (.pt, scripts/train_phase_net.py). A-Phase 계열의 단계 입력을 이 신경망 출력으로 바꾼다",
@@ -707,7 +718,7 @@ def main():
 
     sensor_values = {field: getattr(args, flag[2:]) * scale for flag, field, scale, _ in SENSOR_FLAGS}
     judge_options = (args.phase_delay, args.phase_judge, args.phase_contact_window, args.phase_contact_confirm,
-                     args.phase_catch_up)
+                     args.phase_catch_up, args.phase_advance_slack, args.phase_over_slack, args.phase_fold_slack)
     wants_errors = args.error_sweep or any(sensor_values.values()) or args.map_mode != "accumulated"
     is_student = hasattr(env_cfg.observations, "student")
     if wants_errors and (args.teacher or not is_student):
@@ -732,6 +743,9 @@ def main():
             "contact_window": pick(args.phase_contact_window, task.contact_window, 0.01),
             "contact_confirm": pick(args.phase_contact_confirm, task.contact_confirm, 0.001),
             "catch_up": pick(args.phase_catch_up, task.catch_up),
+            "advance_slack": pick(args.phase_advance_slack, task.advance_slack, 0.01),
+            "over_slack": pick(args.phase_over_slack, task.over_slack, 0.01),
+            "fold_slack": pick(args.phase_fold_slack, task.fold_slack, math.pi / 180.0),
         }
         estimator_delay = pick(args.phase_delay, 0.0, 0.001)
         env_cfg.phase_estimator = PhaseEstimatorCfg(delay=estimator_delay, **estimator_settings)
@@ -792,14 +806,17 @@ def main():
             judge = "높이 3cm"
             if s["by_contact"]:
                 judge += f" 또는 (스위치 + 높이 {s['contact_window'] * 100:.1f}cm, {s['contact_confirm'] * 1000:.0f}ms 유지)"
-            print(f"[INFO] 딛고 있음 판정: {judge} | 전진 건너뛰기: {'켬' if s['catch_up'] else '끔'}")
+            print(f"[INFO] 딛고 있음 판정: {judge} | 전진 건너뛰기: {'켬' if s['catch_up'] else '끔'} | "
+                  f"추정기 기준 낮춤: 전진 {s['advance_slack'] * 100:.1f}cm, 옮기기 {s['over_slack'] * 100:.1f}cm, "
+                  f"접힘 {math.degrees(s['fold_slack']):.1f}도")
         if is_student and not args.teacher:
             print(f"[INFO] 높이맵 방식: {args.map_mode}")
 
         if args.error_sweep:
             run_error_sweep(env, policy, tracker, is_stair, make_error_cfgs, observes_estimate,
                             phase_net=args.phase_net is not None,
-                            net_uses_rule=args.phase_net is not None and net.uses_rule)
+                            net_uses_rule=args.phase_net is not None and net.uses_rule,
+                            sweep_only=args.sweep_only.split(",") if args.sweep_only else None)
             return
 
         on_step, walk_totals, walk_steps = walk_meter(base_env, is_walk) if is_walk.any() else (None, None, None)

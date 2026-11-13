@@ -2,7 +2,7 @@
 
 실물에서는 Point-LIO의 위치, 지도에서 찾은 수직면, 관절각으로 계산한 발끝, 발 접촉으로 단계를 계산한다.
 여기서는 SensorModel의 읽기 값(참값 + 센서 오차)으로 측정값을 만들어 StairTracker와 같은 조건(check_phase)에 넣는다.
-센서 오차가 모두 0이고 by_contact=False, catch_up=False, delay=0이면 StairTracker와 항상 같은 단계가 나온다.
+센서 오차가 모두 0이고 by_contact=False, catch_up=False, delay=0, slack=0이면 StairTracker와 항상 같은 단계가 나온다.
 
 편향이 있으면 추정이 한 단계에서 영영 멈출 수 있다 (참값은 기준을 겨우 넘기고 다음 단계로 가 버린다).
 그래서 실물에서도 쓸 두 가지 복구를 둔다.
@@ -34,6 +34,11 @@ class PhaseEstimatorCfg:
     contact_confirm: float = 0.0
     # 전진 단계가 안 끝났는데 다음 옮기기(마지막 전진이면 정지) 단계가 이미 끝났으면 두 칸 진행한다
     catch_up: bool = False
+    # 판정 기준을 참값(teacher가 배운 기준)보다 이만큼 낮춘다. 정책이 참값 기준까지 움직이면 편향이 slack보다 작은 동안
+    # 추정이 멈추지 않는다. 대신 편향이 반대쪽이면 실제로는 참값 기준보다 최대 2 * slack 덜 움직였을 때 넘어간다
+    advance_slack: float = 0.0  # 전진: 몸통 x [m] (라이다 x 편향 대책)
+    over_slack: float = 0.0     # 옮기기: 발끝이 수직면을 넘은 거리 [m] (라이다 x 편향 대책)
+    fold_slack: float = 0.0     # 앞다리 접힘: coxa 각도 [rad] (엔코더 편향 대책). 접기 전진과 뒷발 단계 모두
 
 
 class PhaseEstimator:
@@ -159,8 +164,12 @@ class PhaseEstimator:
         """센서 읽기 값으로 단계를 진행시킨다."""
         cfg, tracker = self.cfg, self.tracker
         measured = self.measure(truth)
+        slack = {
+            "advance_slack": cfg.advance_slack, "over_slack": cfg.over_slack,
+            "fold_slack": cfg.fold_slack / tracker.gait.front_parallel_coxa,  # 각도 → 접힘 비율
+        }
         check = tracker.check_phase(
-            self.move, self.best_body_x, self.need_init, self.steady_time, measured, by_contact=cfg.by_contact
+            self.move, self.best_body_x, self.need_init, self.steady_time, measured, by_contact=cfg.by_contact, **slack
         )
         steps = check.done.long()
         if cfg.catch_up:
@@ -169,7 +178,7 @@ class PhaseEstimator:
             advancing = (tracker.table_kind[phase] == 0) & (self.move <= tracker.final_advance)  # 0 = ADVANCE
             ahead = tracker.check_phase(
                 self.move + 1, self.best_body_x, torch.ones_like(self.need_init), self.ahead_steady_time, measured,
-                by_contact=cfg.by_contact,
+                by_contact=cfg.by_contact, **slack,
             )
             jump = advancing & ~check.done & ahead.done
             self.ahead_steady_time = torch.where(advancing, ahead.steady_time, torch.zeros_like(self.ahead_steady_time))

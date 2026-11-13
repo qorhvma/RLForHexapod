@@ -254,13 +254,16 @@ class StairTracker:
 
     # ----- 단계 판정 -----
     def check_phase(
-        self, move, best_body_x, need_init, steady_time, m: PhaseMeasurement, by_contact: bool = False
+        self, move, best_body_x, need_init, steady_time, m: PhaseMeasurement, by_contact: bool = False,
+        advance_slack: float = 0.0, over_slack: float = 0.0, fold_slack: float = 0.0,
     ) -> PhaseCheck:
         """측정값으로 이번 step에 단계가 끝나는지 판정한다. 상태를 바꾸지 않는다.
         StairTracker(참값)와 PhaseEstimator(오차 있는 값)가 같은 조건을 쓰도록 여기에 모았다.
 
         by_contact: 딛고 있음에 m.contact_ground(스위치가 눌리고 높이가 넓은 범위 안인 발)를 OR로 더한다.
-        높이 편향으로 3cm 조건이 실패할 때 받쳐 준다. 참값 tracker와 teacher 보상은 쓰지 않는다."""
+        높이 편향으로 3cm 조건이 실패할 때 받쳐 준다. 참값 tracker와 teacher 보상은 쓰지 않는다.
+        *_slack (추정기만): 완료 기준을 이만큼 낮춘다. 정책이 참값 기준까지 움직이면 편향이 slack보다 작은 한
+        추정이 멈추지 않는다. advance_slack = 몸통 x [m], over_slack = 수직면 넘은 거리 [m], fold_slack = 접힘 비율."""
         gait = self.gait
         phase, level = self.phase_and_level(move)
         riser, top = self.riser_and_top(level)
@@ -293,8 +296,8 @@ class StairTracker:
         needs_fold = in_stairs & self.table_fold[phase]
 
         # 단계 완료 조건
-        advance_done = advancing & (new_best >= limit_x - gait.advance_tol)
-        over_riser = tips[..., 0] >= (riser + gait.over_margin).unsqueeze(1)
+        advance_done = advancing & (new_best >= limit_x - gait.advance_tol - advance_slack)
+        over_riser = tips[..., 0] >= (riser + gait.over_margin - over_slack).unsqueeze(1)
         on_target = over_riser & (terrain >= top.unsqueeze(1) - 1e-3) & near_ground & m.in_contact
         move_done = moving_pair & (on_target | ~moving).all(1)
 
@@ -310,7 +313,7 @@ class StairTracker:
 
         # 접기 단계는 지금 앞다리가 접혀 있어야 끝난다 (신기록이 아니라 현재 값)
         # 전진은 접는 단계라 기준이 높고, 뒷발 옮기기는 접힌 상태를 대체로 유지하면 된다
-        fold_required = torch.where(kind == ADVANCE, gait.front_fold_required, gait.front_fold_hold)
+        fold_required = torch.where(kind == ADVANCE, gait.front_fold_required, gait.front_fold_hold) - fold_slack
         fold_ok = (fold >= fold_required.unsqueeze(1)).all(1) | ~needs_fold
         done = ((advance_done | move_done) & all_kept & fold_ok) | settle_done
 
