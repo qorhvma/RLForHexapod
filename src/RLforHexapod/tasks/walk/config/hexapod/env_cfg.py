@@ -592,6 +592,13 @@ class HexapodMixedStudentAPhaseEnvCfg(HexapodMixedStudentEnvCfg):
     phase_estimator: mdp.PhaseEstimatorCfg = mdp.PhaseEstimatorCfg()
 
 
+@configclass
+class HexapodMixedStudentAPhaseCmdEnvCfg(HexapodMixedStudentAPhaseEnvCfg):
+    # 실물 서보는 관절각을 읽을 수 없다: 관절 관측·발끝·앞다리 접힘에 마지막 목표각, 관절 속도 자리에 목표각 변화율.
+    # 관측 크기가 같아 Hexapod-Student-A-Phase 체크포인트에서 이어 학습한다. teacher는 참값을 본다
+    sensor_error: mdp.SensorErrorCfg = mdp.SensorErrorCfg(commanded_joints=True)
+
+
 # 확인용: 통합 학습 전에 한쪽씩만 증류한다
 @configclass
 class HexapodWalkOnlyStudentEnvCfg(HexapodMixedStudentEnvCfg):

@@ -165,6 +165,12 @@ class HexapodMixedStudentAPhaseRunnerCfg(HexapodMixedStudentRunnerCfg):
 
 
 @configclass
+class HexapodMixedStudentAPhaseCmdRunnerCfg(HexapodMixedStudentRunnerCfg):
+    # Hexapod-Student-A-Phase 체크포인트에서 --resume 없이 --checkpoint로 이어 학습한다
+    run_name = "A_phase_mixed_cmd"
+
+
+@configclass
 class HexapodWalkOnlyStudentRunnerCfg(HexapodMixedStudentRunnerCfg):
     run_name = "A_walk_only"
 
