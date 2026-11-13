@@ -14,9 +14,10 @@ HXCMD v1(UDP, 강화학습 정책용)은 joystick_sender.py 가 맡는다. 두 �
 조작 (joystick_sender.py 와 같은 버튼, --btn_* 로 바꾼다)
   조이스틱        기울인 방향으로 걷기 (최고 속도는 파이 노드의 한계 vx 0.12, vy 0.08 m/s, wz 0.6 rad/s)
   Left / Right   왼쪽 / 오른쪽 회전
-  조이스틱 짧게   서기 (`stand`). 처음 켠 뒤와 비상정지를 푼 뒤에 쓴다
+  조이스틱 짧게   일어서기 (`stand`: 앉은 높이에서 몸을 서기 높이까지 들어 올림). 처음 켠 뒤와 비상정지를 푼 뒤에 쓴다
+  노랑 / 파랑     몸 높이 올리기 / 내리기 (`height`: 한 번 10mm, 누르고 있으면 초당 40mm)
   버튼 2          비상정지 켜기 / 끄기. 켜면 `estop`(서보 힘 빼기, 로봇이 주저앉는다). 끄면 `stand`로 다시 일어선다
-  (노랑/파랑 높이 버튼과 길게 누름 리셋은 이 노드에 해당 명령이 없어서 쓰지 않는다)
+  (길게 누름 리셋은 이 노드에 해당 명령이 없어서 쓰지 않는다)
 
 안전
   - 움직일 때만 `walk`를 보낸다. 0 속도 `walk`도 노드를 서기 모드로 바꿔 서보를 켜 버리기 때문이다.
@@ -53,8 +54,10 @@ ESTOP_RESEND = 1.0   # 비상정지 중 `estop`을 다시 보내는 간격 [s]
 PING_SEC = 2.0
 STATE_STALE = 1.5    # 이 시간 동안 텔레메트리가 없으면 "응답 없음" [s]
 WS_PORT = 8765
-# 파이 노드(robot_main.py)의 자체 한계. 노드가 어차피 이 값으로 자른다
-PI_CONFIG = Config(vx_max=0.12, vy_max=0.08, wz_max=0.6)
+# 파이 노드(robot_main.py)의 자체 한계. 노드가 어차피 이 값으로 자른다.
+# 높이는 상대값으로만 쓴다 (Mapper 의 height 변화량 → {"cmd":"height","delta_mm"}), 범위는 노드가 자른다
+PI_CONFIG = Config(vx_max=0.25, vy_max=0.15, wz_max=0.6, height=0.0, h_min=-1.0, h_max=1.0)
+HEIGHT_SEND_MM = 5.0   # Mapper 높이가 이만큼 바뀌면 보낸다 [mm]
 
 
 class WsCommander:
@@ -64,11 +67,13 @@ class WsCommander:
         self.moving = False
         self.estop = False
         self._last_estop_sent = -math.inf
+        self._last_h = None     # 마지막으로 보낸 기준 높이 (Mapper 의 height [m])
 
     def reconnected(self):
         """다시 연결됐다: 노드는 우리 상태를 모른다. 움직이는 중이었다는 기록을 지우고 비상정지는 바로 다시 알린다."""
         self.moving = False
         self._last_estop_sent = -math.inf
+        self._last_h = None
 
     def messages(self, out: Output, now: float) -> list[dict]:
         msgs: list[dict] = []
@@ -82,8 +87,16 @@ class WsCommander:
         if self.estop:  # 비상정지를 풀었다 → 다시 일어선다
             self.estop = False
             msgs.append({"cmd": "stand"})
+            self._last_h = out.height
         elif out.tap:
             msgs.append({"cmd": "stand"})
+            self._last_h = out.height          # 짧게 누르면 Mapper 가 높이를 기본값으로 되돌린다 → 기준만 다시
+        if self._last_h is None:
+            self._last_h = out.height
+        dh = (out.height - self._last_h) * 1000.0
+        if abs(dh) >= HEIGHT_SEND_MM - 1e-6:
+            msgs.append({"cmd": "height", "delta_mm": round(dh, 1)})
+            self._last_h = out.height
         moving = abs(out.vx) + abs(out.vy) + abs(out.wz) > 1e-3
         if moving:
             msgs.append({"cmd": "walk", "vx": round(out.vx, 4), "vy": round(out.vy, 4), "wz": round(out.wz, 4)})
@@ -209,6 +222,12 @@ def status_line(out: Output, alive: bool, link: PiLink, now: float) -> str:
         r = t.get("robot", {})
         feet = "".join("●" if f else "○" for f in r.get("foot", []))
         line += f" | [{t.get('mode')}] 발 {feet} R {r.get('roll', 0):+.1f} P {r.get('pitch', 0):+.1f}"
+        gs = t.get("gait")
+        if gs:
+            line += f" 높이 {gs.get('height', 0):.0f}"
+            if abs(gs.get("height", 0) - gs.get("height_target", 0)) > 0.5:
+                line += f"→{gs.get('height_target', 0):.0f}"
+            line += "mm"
         if link.rtt_ms is not None:
             line += f" | {link.rtt_ms:.0f}ms"
         if t.get("safety"):
@@ -226,7 +245,7 @@ def main():
     p.add_argument("--token", default=os.environ.get("HEXAPOD_TOKEN"), help="파이 노드의 HEXAPOD_TOKEN")
     add_mapper_args(p, PI_CONFIG, with_height=False)
     a = p.parse_args()
-    cfg = config_from_args(a)
+    cfg = config_from_args(a, PI_CONFIG)
     require_pyserial()
     port = find_port() if a.port == "auto" else a.port
     src = SerialSource(port)

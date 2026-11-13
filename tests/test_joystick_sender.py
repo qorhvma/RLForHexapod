@@ -357,3 +357,23 @@ def test_pilink_connect_failure_does_not_raise_and_retries():
     link.send({"cmd": "stop"}, 0.1)  # 연결이 없어도 예외 없음
     assert link.poll(0.5) is False and len(calls) == 1  # 재시도 간격 전
     assert link.poll(1.5) is False and len(calls) == 2
+
+
+def test_ws_height_buttons_send_relative_height():
+    from joystick_ws import PI_CONFIG, WsCommander
+    m, c = Mapper(PI_CONFIG), WsCommander()
+    up = Sample(512, 512, bit(PI_CONFIG.btn_up))
+    msgs = []
+    for i, smp in enumerate([CENTER, up, CENTER, up, CENTER]):
+        m.feed(smp)
+        msgs += c.messages(m.tick(i * 0.02, True), i * 0.02)
+    assert msgs == [{"cmd": "height", "delta_mm": 10.0}, {"cmd": "height", "delta_mm": 10.0}]
+    down = Sample(512, 512, bit(PI_CONFIG.btn_down))
+    m.feed(down)
+    assert c.messages(m.tick(1.0, True), 1.0) == [{"cmd": "height", "delta_mm": -10.0}]
+    # 짧게 누름(서기)은 높이 기준만 다시 잡고 height 를 보내지 않는다
+    msgs = []
+    for i, smp in enumerate([Sample(512, 512, bit(PI_CONFIG.btn_stick)), CENTER]):
+        m.feed(smp)
+        msgs += c.messages(m.tick(2.0 + i * 0.02, True), 2.0 + i * 0.02)
+    assert msgs == [{"cmd": "stand"}]

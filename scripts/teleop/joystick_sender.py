@@ -375,8 +375,9 @@ def add_mapper_args(p: argparse.ArgumentParser, d: Config, with_height: bool = T
         p.add_argument(f"--btn_{name}", type=int, default=getattr(d, f"btn_{name}"), help="버튼 번호 (비트)")
 
 
-def config_from_args(a: argparse.Namespace) -> Config:
-    d = Config()
+def config_from_args(a: argparse.Namespace, defaults: Config | None = None) -> Config:
+    """인자에 없는 값(예: with_height=False 일 때 높이)은 defaults 에서."""
+    d = defaults or Config()
     return Config(a.vx_max, a.vy_max, a.wz_max, getattr(a, "height", d.height), getattr(a, "h_min", d.h_min),
                   getattr(a, "h_max", d.h_max), getattr(a, "h_step", d.h_step),
                   accel_v=a.accel_v, accel_w=a.accel_w, deadzone=a.deadzone, expo=a.expo,
