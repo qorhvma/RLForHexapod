@@ -12,6 +12,7 @@
 3. PhaseRule: 기록된 측정값을 넣으면 규칙 단계·규칙 특징(40)·머문 시간이 시뮬레이션과 같은지
 4. L2Fusion: 합성 계단 점군과 Point-LIO 자세로 만든 높이맵·body_x·각속도·중력·계단 좌표 몸통이 참값과 같은지
    (+ RobotPolicy.rule_measurement가 계단 좌표 몸통과 목표각으로 발끝을 계산하는지)
+5. joint_map: URDF 기하로 잰 실제 관절 각도가 sim_to_true와 같은지, 역변환, (HexaCore가 옆에 있으면) leg_model.fk와 발끝 비교
 """
 
 import sys
@@ -23,6 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from hexapod_kinematics import HexapodKinematics  # noqa: E402
+import joint_map  # noqa: E402
 from l2_sensors import L2Fusion  # noqa: E402
 from phase_rule import Measurement, PhaseRule  # noqa: E402
 from robot_policy import Readings, RobotPolicy  # noqa: E402
@@ -184,8 +186,70 @@ def test_measurement(folder: Path):
         m.front_coxa - policy.last_target[[policy.joint_names.index("L4_coxa"), policy.joint_names.index("L3_coxa")]]).max()), 1e-9)
 
 
+def _suffix(leg):
+    return "" if leg == "L1" else "_" + leg[1]
+
+
+def test_joint_map(folder: Path, hexacore: Path | None = None):
+    """sim 관절각을 흔들어 URDF 기하로 hip·femur·tibia 실제 각도를 재고 sim_to_true와 비교한다."""
+    import json
+
+    io = json.loads((folder / "robot_io.json").read_text(encoding="utf-8"))["action"]
+    names, lim = io["joint_names"], np.array(io["joint_limits_rad"])
+    default = np.array(io["default_joint_pos_rad"])
+    kin = HexapodKinematics()
+    mounts = [35.0, 90.0, 145.2, -144.0, -90.0, -34.8]  # calibration.json kinematics.mounts heading_deg (펌웨어 순서)
+    lm = None
+    if hexacore is not None and (hexacore / "software" / "raspberrypi" / "leg_model.py").exists():
+        sys.path.insert(0, str(hexacore / "software" / "raspberrypi"))
+        import leg_model as lm  # noqa: PLC0415
+    rng = np.random.default_rng(0)
+    err_geom = err_inv = err_fk = 0.0
+    for _ in range(200):
+        q = np.clip(default + rng.uniform(-0.6, 0.6, 18), lim[:, 0], lim[:, 1])
+        t = joint_map.sim_to_true(q, names)
+        err_inv = max(err_inv, np.abs(joint_map.true_to_sim(t, names) - q).max())
+        qd = dict(zip(names, q))
+        tips = kin.tips(qd)
+        for fw, leg in enumerate(joint_map.FW_TO_URDF):
+            _, H = kin._link_pose("coxa" + _suffix(leg), qd)
+            rf, F = kin._link_pose("femur" + _suffix(leg), qd)
+            _, K = kin._link_pose("tibia" + _suffix(leg), qd)
+            n = rf[:, 2]  # femur 관절축 = 다리 평면의 법선
+            plane = lambda v: v - n * (v @ n)  # noqa: E731
+            out = np.cross(n, [0.0, 0.0, 1.0])
+            out = out if out @ (F - H) > 0 else -out  # 다리 평면의 수평 바깥 방향
+            dyaw = (np.degrees(np.arctan2(out[1], out[0])) - mounts[fw] + 180) % 360 - 180
+            hip = 180 - joint_map.SIDE[fw] * dyaw  # 왼다리: 시계 방향(yaw 감소) = 앞 = +
+            u = K - F
+            femur = 180 - np.degrees(np.arcsin(u[2] / np.linalg.norm(u)))
+            v = plane(tips[kin_index(leg)] - K)
+            # 부호 있는 꺾임 (arccos는 일자를 넘어 펴진 무릎을 접힌 쪽으로 읽는다). tibia +(펴짐) = 꺾임 감소
+            rt, _ = kin._link_pose("tibia" + _suffix(leg), qd)
+            bend = -np.degrees(np.arctan2(np.cross(u, v) @ rt[:, 2], u @ v))
+            err_geom = max(err_geom, np.abs(np.array([hip, femur, 180 - bend]) - t[fw]).max())
+            if lm is not None:  # HexaCore 평면 모델: 다리 평면 안에서만 비교 (femur가 coxa 선에서 2 cm 옆에 붙은 것은 모델에 없다)
+                tip = (K + 0.1375 * v / np.linalg.norm(v)) * 1000
+                e = np.array(lm.fk(fw, list(t[fw]))) - tip
+                err_fk = max(err_fk, np.linalg.norm(plane(e)) / 1000)
+    check("joint_map 기하 [도] (heading_deg가 0.1° 단위)", err_geom, 0.1)
+    check("joint_map 역변환 [rad]", err_inv, 1e-9)
+    if lm is not None:
+        check("joint_map ↔ HexaCore leg_model.fk 다리 평면 안 발끝 [m]", err_fk, 1e-3)
+    else:
+        print("건너뜀  HexaCore leg_model.fk 비교 (--hexacore 경로 없음)")
+
+
+def kin_index(leg):
+    from hexapod_kinematics import FOOT_ORDER  # noqa: PLC0415
+
+    return FOOT_ORDER.index("tibia" + _suffix(leg))
+
+
 def main():
     folder = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE.parent / "mixed_phase_v1"
+    hexacore = Path(sys.argv[2]) if len(sys.argv) > 2 else HERE.parents[3] / "HexaCore-clone"
+    test_joint_map(folder, hexacore)
     test_policy(folder)
     test_rule(folder)
     test_measurement(folder)

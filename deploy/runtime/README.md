@@ -7,6 +7,8 @@
 | `robot_policy.py` | `RobotPolicy`: 센서 값 → student 관측(282) → 단계 신경망 → student → 관절 목표각. 관절각 자리에 **마지막 목표각**을 쓴다 |
 | `hexapod_kinematics.py` | URDF 순기구학. 목표각으로 몸통 기준 발끝 높이(`feet_below_body`)를 계산 |
 | `phase_rule.py` | `PhaseRule`: 규칙 단계 추정기 (`mdp/phase_estimator.py` + `check_phase`). 단계 신경망 입력 `phase_rule`(40)·`phase_timer`(1). 표와 기준은 `robot_io.json`의 `phase_rule`에서 읽는다 |
+| `joint_map.py` | sim 관절각 [rad] ↔ 실물 '실제 관절 각도' [도] (HexaCore `leg_model` 정의). hip = 180 ± coxa (왼 +, 오른 −), femur = 270 − femur, tibia = 268.44 + tibia |
+| `pose_check.py` | 1단계 실물 검사: 다리를 공중에 띄우고 sim 기본 자세로 옮긴 뒤 관절을 하나씩 움직여 다리 번호·관절·방향을 눈으로 확인 |
 | `l2_sensors.py` | `L2Fusion`: L2 IMU 각속도·Point-LIO 자세·월드 점군 → 몸통 각속도, 중력 방향, 41×5 높이맵, `body_x`. `main()`은 ROS2 확인용 노드 |
 | `test_runtime.py` | 위 셋을 시뮬레이션 기준 기록·합성 계단으로 검사 |
 
@@ -32,6 +34,15 @@ send(out.target)
 ```
 
 `policy.reset(start_move)`은 동작을 시작할 때 부른다. 계단 앞(앞발이 수직면 뒤)에서 시작하면 0이다.
+
+## 1단계: 관절 변환 확인 (다리를 공중에 띄우고)
+
+```bash
+python3 deploy/runtime/pose_check.py --hexacore ~/HexaCore      # 로봇 Pi, ESP32 = /dev/ttyAMA0
+```
+
+HexaCore 서기 자세 → 3초 동안 sim 기본 자세(허벅지 70° 아래, 종아리 거의 수직) → `all`로 18관절을 하나씩 sim +10° 움직이며
+화면의 "보여야 하는 움직임"과 비교해 y/n을 적는다. 결과는 `pose_check_log.jsonl`. 서보 없이 계산만 하려면 `--sim`.
 
 ## 로봇에서 센서 확인 (ROS2)
 
