@@ -50,6 +50,8 @@ class L2Fusion:
         self.body_x = np.array([NO_STAIRS_BODY_X] + [BODY_X_CLIP[0]] * len(self.stairs.riser_x))
         self.map_t = 0.0
         self.floor_z = np.nan
+        self.risers = np.full(len(self.stairs.riser_x), np.nan)
+        self.lin_vel = np.zeros(3)
 
     # ----- 콜백 -----
     def on_imu(self, angular_velocity, t: float):
@@ -58,13 +60,15 @@ class L2Fusion:
         with self.lock:
             self.gyro, self.gyro_t = w, t
 
-    def on_pose(self, position, quaternion_xyzw, t: float):
-        """Point-LIO 자세 (월드에서 본 IMU) → 월드에서 본 몸통."""
+    def on_pose(self, position, quaternion_xyzw, t: float, linear_velocity=None):
+        """Point-LIO 자세 (월드에서 본 IMU) → 월드에서 본 몸통. linear_velocity: Odometry twist (크기만 쓴다)."""
         r_wi = quat_to_matrix(quaternion_xyzw)
         r_wb = r_wi @ self.r_ib
         p_wb = np.asarray(position, float) + r_wi @ self.p_ib
         with self.lock:
             self.r_wb, self.p_wb, self.pose_t = r_wb, p_wb, t
+            if linear_velocity is not None:
+                self.lin_vel = np.asarray(linear_velocity, float)
 
     def on_cloud(self, points_world: np.ndarray, t: float):
         """Point-LIO 월드 점군 한 프레임 → 높이맵과 body_x."""
@@ -79,6 +83,7 @@ class L2Fusion:
             self.height_map = np.where(np.isnan(hm), old, hm)
             self.body_x = self._body_x(res.s_base, res.risers)
             self.floor_z = res.floor_z
+            self.risers = res.risers
             self.map_t = t
 
     def _body_x(self, s_base: float, risers: np.ndarray) -> np.ndarray:
@@ -87,6 +92,25 @@ class L2Fusion:
             return np.array([NO_STAIRS_BODY_X] + [BODY_X_CLIP[0]] * len(risers))
         r = np.where(np.isfinite(risers), risers, risers[0] + self.tread * np.arange(len(risers)))
         return np.concatenate([[s_base - r[0]], np.clip(s_base - r, *BODY_X_CLIP)])
+
+    def stairs_pose(self, x0: float) -> tuple[np.ndarray, np.ndarray] | None:
+        """계단 좌표(첫 수직면 x = x0, 계단 가운데 선 y = 0, 바닥 z = 0)에서 본 몸통 (위치, 회전). 수직면을 못 찾았으면 None.
+        규칙 단계 추정기(phase_rule.py)가 발끝을 이 좌표로 받는다. s축이 계단 가운데 선이라고 가정한다 (heightmap.py)."""
+        with self.lock:
+            if self.pipeline.locator is None or not np.isfinite(self.risers[0]) or not np.isfinite(self.floor_z):
+                return None
+            loc = self.pipeline.locator
+            rel = self.p_wb[:2] - loc.origin
+            pos = np.array([x0 + rel @ loc.dir - self.risers[0], rel @ loc.perp, self.p_wb[2] - self.floor_z])
+            yaw = np.arctan2(loc.dir[1], loc.dir[0])
+            c, s = np.cos(-yaw), np.sin(-yaw)
+            r_sw = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+            return pos, r_sw @ self.r_wb
+
+    def speed(self) -> float:
+        """시뮬레이션 root_vel_w 노름과 같은 값: |(선속도, 각속도)|."""
+        with self.lock:
+            return float(np.sqrt(self.lin_vel @ self.lin_vel + self.gyro @ self.gyro))
 
     # ----- 정책 루프가 읽는 값 -----
     def snapshot(self) -> dict:
@@ -127,7 +151,7 @@ def main():
     node.create_subscription(Odometry, args.odom_topic, lambda m: fusion.on_pose(
         (m.pose.pose.position.x, m.pose.pose.position.y, m.pose.pose.position.z),
         (m.pose.pose.orientation.x, m.pose.pose.orientation.y, m.pose.pose.orientation.z, m.pose.pose.orientation.w),
-        stamp(m)), 10)
+        stamp(m), (m.twist.twist.linear.x, m.twist.twist.linear.y, m.twist.twist.linear.z)), 10)
     node.create_subscription(PointCloud2, args.cloud_topic, lambda m: fusion.on_cloud(
         point_cloud2.read_points_numpy(m, field_names=("x", "y", "z")).astype(float), stamp(m)), 10)
     start = time.time()

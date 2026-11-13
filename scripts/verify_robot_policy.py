@@ -28,7 +28,7 @@ TOL = 1e-4
 def main():
     folder = Path(sys.argv[1] if len(sys.argv) > 1 else "deploy/mixed_phase_v1")
     io = json.loads((folder / "robot_io.json").read_text(encoding="utf-8"))
-    ref = np.load(folder / "reference.npz")
+    ref = dict(np.load(folder / "reference.npz"))  # npz는 키로 읽을 때마다 압축을 푼다
     student = ort.InferenceSession(str(folder / io["student"]["file"]), providers=["CPUExecutionProvider"])
     net = ort.InferenceSession(str(folder / io["phase_net"]["file"]), providers=["CPUExecutionProvider"])
     h_student_shape = io["student"]["inputs"]["h_in"]

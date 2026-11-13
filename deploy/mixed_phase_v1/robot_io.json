@@ -383,6 +383,95 @@
     "tread": 0.3,
     "step_height": 0.16,
     "num_steps": 3,
+    "top_length": 0.8,
     "width": 1.0
+  },
+  "phase_rule": {
+    "phases": [
+      {
+        "kind": 0,
+        "feet": [],
+        "body_x": -0.2,
+        "fold": false
+      },
+      {
+        "kind": 1,
+        "feet": [
+          0,
+          5
+        ],
+        "body_x": -0.1,
+        "fold": false
+      },
+      {
+        "kind": 1,
+        "feet": [
+          1,
+          4
+        ],
+        "body_x": 0.05,
+        "fold": false
+      },
+      {
+        "kind": 0,
+        "feet": [],
+        "body_x": 0.08,
+        "fold": true
+      },
+      {
+        "kind": 1,
+        "feet": [
+          2
+        ],
+        "body_x": 0.08,
+        "fold": true
+      },
+      {
+        "kind": 1,
+        "feet": [
+          3
+        ],
+        "body_x": 0.2,
+        "fold": true
+      }
+    ],
+    "kinds": {
+      "advance": 0,
+      "move": 1
+    },
+    "gait": {
+      "advance_tol": 0.01,
+      "backward_speed_tol": 0.05,
+      "raise_reward_cap": 0.05,
+      "min_vertical": 0.71,
+      "inward_tol": 0.03,
+      "over_margin": 0.02,
+      "edge_reach": 0.015,
+      "front_parallel_coxa": 0.96,
+      "front_fold_required": 0.8,
+      "front_fold_hold": 0.6,
+      "tip_height": 0.013,
+      "contact_tol": 0.03,
+      "hold_time": 1.0,
+      "speed_tol": 0.1,
+      "speed_std": 0.3,
+      "buffer_size": 1000,
+      "save_speed_max": 0.5
+    },
+    "front_coxa_joints": [
+      "L4_coxa",
+      "L3_coxa"
+    ],
+    "estimator": {
+      "delay": 0.0,
+      "randomize_delay": false,
+      "by_contact": false,
+      "contact_window": 0.08,
+      "contact_confirm": 0.0,
+      "catch_up": false,
+      "advance_slack": 0.0,
+      "over_slack": 0.0,
+      "fold_slack": 0.0
+    }
   }
-}
+}

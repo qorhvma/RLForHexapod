@@ -20,6 +20,7 @@ import numpy as np
 import onnxruntime as ort
 
 from hexapod_kinematics import HexapodKinematics
+from phase_rule import Measurement, PhaseRule
 
 
 @dataclass
@@ -66,10 +67,15 @@ class RobotPolicy:
         self.net_groups = list(groups)  # phase_net, phase_rule, phase_timer 순서
         self.h_student_shape = io["student"]["inputs"]["h_in"]
         self.h_net_shape = io["phase_net"]["inputs"]["h_in"]
+        self.rule = PhaseRule(io)
+        self.x0 = io["stairs_trained"]["x0"]
+        self.front_coxa_ids = [self.joint_names.index(n) for n in io["phase_rule"]["front_coxa_joints"]]
         self.reset()
 
-    def reset(self):
-        """동작 시작: 두 신경망 기억을 비우고, 목표각을 기본 자세로 둔다."""
+    def reset(self, start_move: int = 0):
+        """동작 시작: 두 신경망 기억을 비우고, 목표각을 기본 자세로, 규칙 단계를 start_move로 둔다."""
+        self.rule.reset(start_move)
+        self._fresh = True
         self.h_student = np.zeros(self.h_student_shape, np.float32)
         self.h_net = np.zeros(self.h_net_shape, np.float32)
         self.last_target = self.default.copy()
@@ -108,6 +114,20 @@ class RobotPolicy:
         parts = [np.delete(obs, np.arange(self.phase_slice.start, self.phase_slice.stop))]
         parts += [extra[g] for g in self.net_groups]
         return np.concatenate(parts)[None]
+
+    def rule_measurement(self, base_pos: np.ndarray, base_rot: np.ndarray, contacts, speed: float) -> Measurement:
+        """규칙 추정기 측정값. base_pos·base_rot = 계단 좌표의 몸통 (L2Fusion.stairs_pose). 발끝·앞다리는 마지막 목표각."""
+        tips = np.asarray(base_pos, float) + self.kin.tips(self.last_target) @ np.asarray(base_rot, float).T
+        return Measurement(float(base_pos[0]), tips, np.asarray(contacts, bool),
+                           self.last_target[self.front_coxa_ids].astype(float), float(speed))
+
+    def step_with_rule(self, r: Readings, base_pos, base_rot, speed: float) -> Step:
+        """규칙 추정기까지 돌리는 한 step. 시뮬레이션 순서와 같다: 측정 → 단계 진행(리셋 직후 제외) → 규칙 특징 → 신경망."""
+        m = self.rule_measurement(base_pos, base_rot, r.contacts, speed)
+        if not self._fresh:
+            self.rule.update(m)
+        self._fresh = False
+        return self.step(r, self.rule.features(m), self.rule.time_feature())
 
     def step(self, r: Readings, rule_features: np.ndarray, rule_time: float) -> Step:
         obs = self.student_obs(r)

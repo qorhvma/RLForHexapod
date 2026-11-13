@@ -9,7 +9,9 @@
 1. 순기구학: 기준 기록의 관절각·중력으로 계산한 feet_below_body가 시뮬레이션 값과 같은지
 2. RobotPolicy: 기준 기록의 센서 값을 넣으면 관측 순서·단계 신경망 입력·행동이 기록과 같은지
    (기준 기록은 실제 관절각으로 움직였으므로, 여기서는 목표각 자리에 기록된 관절각을 넣어 순서만 맞춰 본다)
-3. L2Fusion: 합성 계단 점군과 Point-LIO 자세로 만든 높이맵·body_x·각속도·중력이 참값과 같은지
+3. PhaseRule: 기록된 측정값을 넣으면 규칙 단계·규칙 특징(40)·머문 시간이 시뮬레이션과 같은지
+4. L2Fusion: 합성 계단 점군과 Point-LIO 자세로 만든 높이맵·body_x·각속도·중력·계단 좌표 몸통이 참값과 같은지
+   (+ RobotPolicy.rule_measurement가 계단 좌표 몸통과 목표각으로 발끝을 계산하는지)
 """
 
 import sys
@@ -22,6 +24,7 @@ sys.path.insert(0, str(HERE))
 
 from hexapod_kinematics import HexapodKinematics  # noqa: E402
 from l2_sensors import L2Fusion  # noqa: E402
+from phase_rule import Measurement, PhaseRule  # noqa: E402
 from robot_policy import Readings, RobotPolicy  # noqa: E402
 from heightmap import GX, GY, Stairs, rpy_to_matrix  # noqa: E402  (l2_sensors가 경로를 넣는다)
 
@@ -37,7 +40,7 @@ def check(name, value, tol):
 
 def test_policy(folder: Path):
     policy = RobotPolicy(folder)
-    ref = np.load(folder / "reference.npz")
+    ref = dict(np.load(folder / "reference.npz"))  # npz는 키로 읽을 때마다 압축을 푼다
     terms = policy.terms
     get = lambda obs, name: obs[terms[name]["start"]:terms[name]["start"] + terms[name]["size"]]  # noqa: E731
     kin = HexapodKinematics(joint_names=policy.joint_names)
@@ -71,6 +74,38 @@ def test_policy(folder: Path):
     check("RobotPolicy student 관측", worst_obs, 1e-4)
     check("RobotPolicy 단계 logits", worst_logits, 1e-3)
     check("RobotPolicy actions", worst_actions, 1e-3)
+
+
+def test_rule(folder: Path):
+    import json
+
+    io = json.loads((folder / "robot_io.json").read_text(encoding="utf-8"))
+    ref = dict(np.load(folder / "reference.npz"))
+    if "m_tips" not in ref:
+        print("건너뜀  PhaseRule: 이 기준 기록에는 측정값이 없습니다 (export_robot_policy.py로 다시 내보낼 것)")
+        return
+    groups = io["phase_net"]["x_groups"]
+    offset = 275 + sum(t["size"] for t in groups["phase_net"])
+    size = groups["phase_rule"][0]["size"]
+    nx = ref["net_x"]
+    T, N = nx.shape[:2]
+    worst_f = worst_time = 0.0
+    move_bad = 0
+    for e in range(N):
+        rule = PhaseRule(io)
+        for t in range(T):
+            m = Measurement(float(ref["m_body_x"][t, e]), ref["m_tips"][t, e], ref["m_contact"][t, e],
+                            ref["m_front_coxa"][t, e], float(ref["m_speed"][t, e]))
+            if t == 0 or ref["done"][t - 1, e]:
+                rule.reset(int(ref["est_move"][t, e]))  # 계단 env는 단계 0 또는 1에서 시작한다
+            else:
+                rule.update(m)
+            move_bad += int(rule.move != ref["est_move"][t, e])
+            worst_f = max(worst_f, float(np.abs(rule.features(m) - nx[t, e, offset:offset + size]).max()))
+            worst_time = max(worst_time, abs(rule.time_feature() - float(nx[t, e, -1])))
+    check("PhaseRule 단계 번호 불일치 (step 수)", move_bad, 0)
+    check("PhaseRule 규칙 특징", worst_f, 1e-5)
+    check("PhaseRule 머문 시간", worst_time, 1e-3)
 
 
 def stair_cloud(stairs: Stairs, first_riser_world: float, density=40000, seed=0) -> np.ndarray:
@@ -115,6 +150,11 @@ def test_fusion():
     true_body_x = bx - first_riser
     want = np.concatenate([[true_body_x], np.clip(true_body_x - np.array(stairs.riser_x), -0.3, 0.6)])
     check("body_x (m)", float(np.abs(s["body_x"] - want).max()), 0.011)
+    x0 = 0.5
+    pos, rot = fusion.stairs_pose(x0)
+    check("계단 좌표 몸통 위치 (m)", float(np.abs(pos - [x0 + true_body_x, 0.0, base_z]).max()), 0.011)
+    check("계단 좌표 몸통 회전", float(np.abs(rot - np.eye(3)).max()), 1e-9)
+    return fusion
 
     r_wb = rpy_to_matrix(np.radians(4.0), np.radians(-7.0), np.radians(10.0))
     set_base(np.array([0.1, 0.0, base_z]), r_wb, 10.0)
@@ -130,9 +170,25 @@ def _matrix_to_quat_wxyz(r):
     return w, (r[2, 1] - r[1, 2]) / (4 * w), (r[0, 2] - r[2, 0]) / (4 * w), (r[1, 0] - r[0, 1]) / (4 * w)
 
 
+def test_measurement(folder: Path):
+    """rule_measurement: 발끝 = 계단 좌표 몸통 위치 + 회전 × FK(목표각)."""
+    policy = RobotPolicy(folder)
+    rng = np.random.default_rng(1)
+    policy.last_target = (policy.default + rng.uniform(-0.3, 0.3, 18)).astype(np.float32)
+    rot = rpy_to_matrix(0.05, -0.1, 0.2)
+    pos = np.array([0.4, 0.02, 0.25])
+    m = policy.rule_measurement(pos, rot, np.ones(6), 0.1)
+    want = pos + (rot @ policy.kin.tips(policy.last_target).T).T
+    check("rule_measurement 발끝 (m)", float(np.abs(m.tips - want).max()), 1e-9)
+    check("rule_measurement 앞다리 coxa", float(np.abs(
+        m.front_coxa - policy.last_target[[policy.joint_names.index("L4_coxa"), policy.joint_names.index("L3_coxa")]]).max()), 1e-9)
+
+
 def main():
     folder = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE.parent / "mixed_phase_v1"
     test_policy(folder)
+    test_rule(folder)
+    test_measurement(folder)
     test_fusion()
     print("모두 통과" if not failures else f"실패: {failures}")
     sys.exit(1 if failures else 0)
