@@ -10,6 +10,8 @@
     robot_io.json    관측 항의 순서·크기·뜻, 행동 → 관절 목표각 식, 관절 이름·기본 자세·범위, 단계 이름
     reference.npz    시뮬레이션에서 신경망 단계로 움직인 기록 (센서 오차 없음). 로봇 쪽 구현을 맞춰 볼 정답
                      student_obs, net_x, logits, actions, true_phase, done, is_stair (모두 step 순서)
+                     m_body_x, m_tips, m_contact, m_front_coxa, m_speed: 그 관측 때 규칙 추정기가 본 측정값
+                     (env 원점 기준, deploy/runtime/phase_rule.py 검사용), est_move: 그때 규칙 추정기 단계 번호
 
 ONNX 파일이 PyTorch와 같은 값을 내는지는 로컬에서 scripts/verify_robot_policy.py로 검사한다
 (이 PC의 Isaac Lab 환경에는 onnxruntime이 없다).
@@ -81,7 +83,9 @@ def main():
 
     import RLforHexapod.tasks  # noqa: F401
     from RLforHexapod.tasks.walk.config.hexapod.agents.phase_net import PhaseNet, PhaseNetPolicy, term_slice
-    from RLforHexapod.tasks.walk.mdp import FOOT_BODIES, stair_env_mask
+    import dataclasses
+
+    from RLforHexapod.tasks.walk.mdp import FOOT_BODIES, FRONT_COXA_JOINTS, PHASES, stair_env_mask
 
     parser = argparse.ArgumentParser(description="실물 로봇용 정책 파일 만들기")
     parser.add_argument("--task", default="Hexapod-Student-A-Phase")
@@ -197,7 +201,16 @@ def main():
                 "train_noise_std_m": 0.01,
             },
             "stairs_trained": {"x0": stairs.x0, "tread": stairs.tread, "step_height": stairs.step_height,
-                               "num_steps": stairs.num_steps, "width": stairs.width},
+                               "num_steps": stairs.num_steps, "top_length": stairs.top_length, "width": stairs.width},
+            # 규칙 단계 추정기 (deploy/runtime/phase_rule.py가 읽는다). 판정 설정은 단계 신경망 학습 때와 같은 기본값
+            "phase_rule": {
+                "phases": [{"kind": p.kind, "feet": list(p.feet), "body_x": p.body_x, "fold": p.fold} for p in PHASES],
+                "kinds": {"advance": 0, "move": 1},
+                "gait": {f.name: getattr(env_cfg.stair_gait, f.name) for f in dataclasses.fields(env_cfg.stair_gait)},
+                "front_coxa_joints": list(FRONT_COXA_JOINTS),
+                "estimator": {f.name: getattr(env_cfg.phase_estimator, f.name)
+                              for f in dataclasses.fields(env_cfg.phase_estimator)},
+            },
         }
         with open(os.path.join(args.out, "robot_io.json"), "w", encoding="utf-8") as f:
             json.dump(io, f, indent=2, ensure_ascii=False)
@@ -206,10 +219,19 @@ def main():
         wrapped = PhaseNetPolicy(policy, net, cut, base_env.num_envs, device)
         tracker = base_env.stair_tracker
         obs = env.get_observations()
-        rec = {k: [] for k in ("student_obs", "net_x", "logits", "actions", "true_phase", "done")}
+        rec = {k: [] for k in ("student_obs", "net_x", "logits", "actions", "true_phase", "done",
+                               "m_body_x", "m_tips", "m_contact", "m_front_coxa", "m_speed", "est_move")}
         with torch.inference_mode():
             for _ in range(args.steps):
                 rec["true_phase"].append(tracker.phase_one_hot(tracker.move).argmax(-1).cpu())
+                # 이 관측의 규칙 특징이 쓴 측정값 (stair_rule_features와 같은 읽기)
+                m = tracker.estimator.read(tracker.truth_measurement())
+                rec["m_body_x"].append(m.body_x.cpu())
+                rec["m_tips"].append(m.tips.cpu())
+                rec["m_contact"].append(m.in_contact.cpu())
+                rec["m_front_coxa"].append(m.front_coxa.cpu())
+                rec["m_speed"].append(m.speed.cpu())
+                rec["est_move"].append(tracker.estimator.move.cpu().clone())
                 actions = wrapped(obs)
                 rec["student_obs"].append(obs["student"].cpu().clone())  # 단계 칸이 신경망 출력으로 바뀐 관측
                 rec["net_x"].append(wrapped.last_input.cpu().clone())
