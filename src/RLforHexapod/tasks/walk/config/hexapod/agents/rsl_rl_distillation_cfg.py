@@ -159,6 +159,12 @@ class HexapodMixedStudentBRunnerCfg(HexapodMixedStudentRunnerCfg):
 
 
 @configclass
+class HexapodMixedStudentAPhaseRunnerCfg(HexapodMixedStudentRunnerCfg):
+    # A-Phase 계단 student에서 이어 학습한다 (scripts/expand_student.py로 만든 파일을 --checkpoint로)
+    run_name = "A_phase_mixed"
+
+
+@configclass
 class HexapodWalkOnlyStudentRunnerCfg(HexapodMixedStudentRunnerCfg):
     run_name = "A_walk_only"
 

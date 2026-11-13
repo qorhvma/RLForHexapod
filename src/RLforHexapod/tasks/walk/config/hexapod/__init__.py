@@ -113,6 +113,16 @@ gym.register(
 )
 
 gym.register(
+    id="Hexapod-Student-A-Phase",
+    entry_point=f"{_PACKAGE}.hexapod_env:HexapodEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point":f"{_PACKAGE}.env_cfg:HexapodMixedStudentAPhaseEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{_PACKAGE}.agents.rsl_rl_distillation_cfg:HexapodMixedStudentAPhaseRunnerCfg"
+    },
+)
+
+gym.register(
     id="Hexapod-Student-B",
     entry_point=f"{_PACKAGE}.hexapod_env:HexapodEnv",
     disable_env_checker=True,

@@ -568,6 +568,30 @@ class HexapodMixedStudentBEnvCfg(HexapodMixedStudentEnvCfg):
     observations: ObservationsCfg = MixedStudentBObservationsCfg()
 
 
+@configclass
+class MixedStudentAPhaseObservationsCfg(MixedStudentObservationsCfg):
+    """통합 student + 단계 입력 (A-Phase 구조). student 관측 순서: Student-A 관측, 명령 (4), 단계 (7).
+    A-Phase와 비교하면 단계 칸 앞에 명령 4칸이 끼어 있다 (scripts/expand_student.py가 이 자리에 칸을 넣는다).
+    걷기 env는 계단에 닿지 않으므로 단계가 늘 첫 전진(계단 앞으로 가기)이다."""
+
+    @configclass
+    class StudentCfg(MixedStudentObservationsCfg.StudentCfg):
+        phase = ObsTerm(func=mdp.stair_phase_est_obs)
+
+    student: StudentCfg = StudentCfg()
+    # 단계 추정 신경망용 입력. 나중에 이 env에서 신경망을 다시 학습할 수 있게 A-Phase와 같은 그룹을 둔다
+    phase_net: StudentAPhaseObservationsCfg.PhaseNetCfg = StudentAPhaseObservationsCfg.PhaseNetCfg()
+    phase_rule: StudentAPhaseObservationsCfg.PhaseRuleCfg = StudentAPhaseObservationsCfg.PhaseRuleCfg()
+    phase_timer: StudentAPhaseObservationsCfg.PhaseTimerCfg = StudentAPhaseObservationsCfg.PhaseTimerCfg()
+
+
+@configclass
+class HexapodMixedStudentAPhaseEnvCfg(HexapodMixedStudentEnvCfg):
+    observations: ObservationsCfg = MixedStudentAPhaseObservationsCfg()
+    # 오차가 없으면 student가 참값 단계를 본다 (A-Phase와 같음). 오차 평가는 scripts/eval_stairs.py에서 바꾼다
+    phase_estimator: mdp.PhaseEstimatorCfg = mdp.PhaseEstimatorCfg()
+
+
 # 확인용: 통합 학습 전에 한쪽씩만 증류한다
 @configclass
 class HexapodWalkOnlyStudentEnvCfg(HexapodMixedStudentEnvCfg):
