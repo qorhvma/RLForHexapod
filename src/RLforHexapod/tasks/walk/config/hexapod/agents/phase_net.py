@@ -156,3 +156,40 @@ class PhaseNetPolicy:
             self.hidden.zero_()
         else:
             self.hidden[dones.bool()] = 0.0
+
+
+class PhaseNetObsHook:
+    """env 쪽에서 A-Phase student 관측의 단계 칸을 신경망 출력으로 바꾼다 (scripts/finetune_phase_policy.py).
+
+    PhaseNetPolicy는 정책을 감싸지만, 증류 러너(rsl_rl)는 env 관측을 그대로 저장하고 학습하므로 env 쪽에서 바꿔야
+    student가 신경망 단계를 보고 학습한다. HexapodEnv.step/reset이 관측을 만든 뒤 부른다 (env.phase_net_hook).
+    한 env step에 신경망 기억을 한 번만 진행한다. 결과는 같은 관측·리셋 순서에서 PhaseNetPolicy와 같다.
+    러너가 inference_mode에서 env를 돌리므로 기억은 제자리 수정 없이 새 텐서로 바꾼다."""
+
+    def __init__(self, net: PhaseNet, cut: slice, num_envs: int, device, group: str = "student"):
+        self.net, self.cut, self.group = net.eval(), cut, group
+        self.hidden = net.initial_hidden(num_envs, device)
+        self.phase: torch.Tensor | None = None  # 마지막으로 넣은 단계 입력 (N, 7)
+        self.last_logits: torch.Tensor | None = None
+
+    def clear(self, mask: torch.Tensor):
+        """mask(bool, N)인 env의 기억을 비운다 (에피소드가 새로 시작됨)."""
+        self.hidden = self.hidden * (~mask).unsqueeze(1).to(self.hidden.dtype)
+
+    @torch.no_grad()
+    def apply(self, obs: dict, only: torch.Tensor | None = None):
+        """obs[group]의 단계 칸을 신경망 출력으로 바꾼다 (obs 사전의 항목을 새 텐서로 바꿈).
+        only(bool, N): 이 env만 기억을 진행하고 단계를 새로 정한다. 나머지는 직전 단계를 그대로 넣는다
+        (일부 env만 리셋할 때 다른 env의 기억이 두 번 진행되지 않게)."""
+        x = net_input(obs, self.cut, self.net.extra_groups, self.group)
+        logits, hidden = self.net.step(x, self.hidden)
+        phase = self.net.to_phase_input(logits)
+        if only is not None and self.phase is not None:
+            keep = ~only.unsqueeze(1)
+            hidden = torch.where(keep, self.hidden, hidden)
+            phase = torch.where(keep, self.phase, phase)
+            logits = torch.where(keep, self.last_logits, logits)
+        self.hidden, self.phase, self.last_logits = hidden, phase, logits
+        replaced = obs[self.group].clone()
+        replaced[:, self.cut] = phase
+        obs[self.group] = replaced
